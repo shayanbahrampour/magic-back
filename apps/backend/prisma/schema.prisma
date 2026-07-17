@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String
+  books Book[]
+}
+
+model Book {
+  id                Int        @id @default(autoincrement())
+  title             String
+  author            String
+  short_description String
+  full_description  String
+  categories        Category[]
+  chapters          Chapter[]
+}
+
+model Chapter {
+  id            Int    @id @default(autoincrement())
+  book_id       Int
+  book          Book   @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  title         String
+  chapter_order Int
+  pages         Page[]
+}
+
+model Page {
+  id           Int     @id @default(autoincrement())
+  chapter_id   Int
+  chapter      Chapter @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  page_number  Int
+  text_content String?
+  image_urls   String  // Store JSON-serialized array of strings, e.g., '["url1", "url2"]'
+}
