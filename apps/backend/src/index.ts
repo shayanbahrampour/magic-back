@@ -6,6 +6,8 @@ import categoriesRouter from './routes/categories';
 import booksRouter from './routes/books';
 import chaptersRouter from './routes/chapters';
 import pagesRouter from './routes/pages';
+import authRouter from './routes/auth';
+import uploadRouter from './routes/upload';
 
 dotenv.config();
 
@@ -20,6 +22,8 @@ const frontendPath = path.join(__dirname, '../../admin/dist');
 app.use(express.static(frontendPath));
 
 // Routes
+app.use('/api/auth', authRouter);
+app.use('/api/upload', uploadRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/books', booksRouter);
 app.use('/api/chapters', chaptersRouter);

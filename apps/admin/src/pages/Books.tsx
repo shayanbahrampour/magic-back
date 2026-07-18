@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Book, Category } from '../services/api';
-import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon } from 'lucide-react';
 
 export const Books: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -16,6 +16,8 @@ export const Books: React.FC = () => {
   const [author, setAuthor] = useState('');
   const [shortDesc, setShortDesc] = useState('');
   const [fullDesc, setFullDesc] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
 
   const [error, setError] = useState('');
@@ -47,7 +49,8 @@ export const Books: React.FC = () => {
     setAuthor(book.author);
     setShortDesc(book.short_description);
     setFullDesc(book.full_description);
-    setSelectedCategoryIds(book.categories ? book.categories.map(c => c.id) : []);
+    setCoverImageUrl(book.cover_image_url || '');
+    setSelectedCategoryIds(book.categories ? book.categories.map((c) => c.id) : []);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -59,8 +62,27 @@ export const Books: React.FC = () => {
     setAuthor('');
     setShortDesc('');
     setFullDesc('');
+    setCoverImageUrl('');
+    setUploadingCover(false);
     setSelectedCategoryIds([]);
     setError('');
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError('');
+    setUploadingCover(true);
+    try {
+      const res = await api.uploadFile(file);
+      setCoverImageUrl(res.url);
+      setSuccess('تصویر جلد با موفقیت آپلود شد');
+    } catch (err: any) {
+      setError(err.message || 'خطا در آپلود تصویر جلد');
+    } finally {
+      setUploadingCover(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,6 +100,7 @@ export const Books: React.FC = () => {
       author,
       short_description: shortDesc,
       full_description: fullDesc,
+      cover_image_url: coverImageUrl || null,
       category_ids: selectedCategoryIds,
     };
 
@@ -192,6 +215,70 @@ export const Books: React.FC = () => {
               />
             </div>
 
+            {/* Cover Image Upload Zone */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-500 mb-2">
+                تصویر جلد کتاب (آپلود در MinIO / S3)
+              </label>
+              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                {coverImageUrl ? (
+                  <div className="relative group shrink-0">
+                    <img
+                      src={coverImageUrl}
+                      alt="Cover Preview"
+                      className="w-24 h-32 object-cover rounded-xl border border-slate-300 shadow-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCoverImageUrl('')}
+                      className="absolute -top-2 -right-2 bg-rose-600 text-white p-1.5 rounded-full shadow hover:bg-rose-700 transition"
+                      title="حذف تصویر جلد"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-24 h-32 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 bg-white shrink-0">
+                    <ImageIcon className="h-6 w-6 mb-1 text-slate-300" />
+                    <span className="text-[10px] font-bold">بدون تصویر</span>
+                  </div>
+                )}
+
+                <div className="flex-1 flex flex-col justify-center gap-2 text-center sm:text-right">
+                  <p className="text-xs text-slate-600 font-semibold">
+                    برای آپلود تصویر جلد یا تغییر تصویر کنونی، یک فایل عکس انتخاب کنید.
+                  </p>
+                  <div className="flex items-center gap-3 justify-center sm:justify-start mt-1">
+                    <label className="cursor-pointer px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-2">
+                      {uploadingCover ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>در حال آپلود...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          <span>انتخاب و آپلود تصویر جلد</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCoverUpload}
+                        disabled={uploadingCover}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {coverImageUrl && (
+                    <p className="text-[11px] text-slate-400 font-mono truncate max-w-md" dir="ltr">
+                      {coverImageUrl}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Multi Category Select */}
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-500 mb-2">
@@ -209,7 +296,7 @@ export const Books: React.FC = () => {
                         type="button"
                         onClick={() => {
                           if (isSelected) {
-                            setSelectedCategoryIds(selectedCategoryIds.filter(id => id !== c.id));
+                            setSelectedCategoryIds(selectedCategoryIds.filter((id) => id !== c.id));
                           } else {
                             setSelectedCategoryIds([...selectedCategoryIds, c.id]);
                           }
@@ -291,7 +378,7 @@ export const Books: React.FC = () => {
             <table className="w-full text-right border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">کتاب</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">کتاب و جلد</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">نویسنده</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">دسته‌بندی‌ها</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">عملیات</th>
@@ -302,9 +389,17 @@ export const Books: React.FC = () => {
                   <tr key={book.id} className="hover:bg-slate-50/40 transition group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-lg group-hover:bg-indigo-100 transition-colors shrink-0">
-                          <BookOpen className="h-5 w-5" />
-                        </div>
+                        {book.cover_image_url ? (
+                          <img
+                            src={book.cover_image_url}
+                            alt={book.title}
+                            className="w-11 h-14 object-cover rounded-lg border border-slate-200 shadow-sm shrink-0"
+                          />
+                        ) : (
+                          <div className="bg-indigo-50 text-indigo-600 p-3 rounded-xl group-hover:bg-indigo-100 transition-colors shrink-0 flex items-center justify-center w-11 h-14">
+                            <BookOpen className="h-5 w-5" />
+                          </div>
+                        )}
                         <div>
                           <p className="font-bold text-slate-800 text-sm">{book.title}</p>
                           <p className="text-xs text-slate-400 max-w-xs truncate mt-0.5">{book.short_description}</p>
@@ -363,3 +458,4 @@ export const Books: React.FC = () => {
     </div>
   );
 };
+

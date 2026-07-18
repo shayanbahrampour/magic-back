@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import prisma from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
+router.use(requireAuth);
 
 // Function to safely parse image_urls from string back to array of strings
 function parsePageImages(page: any) {

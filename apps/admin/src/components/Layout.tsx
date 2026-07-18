@@ -5,15 +5,18 @@ import {
   Tag, 
   BookOpen, 
   BookMarked,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
+  onLogout?: () => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
   const location = useLocation();
+  const adminPhone = localStorage.getItem('admin_phone') || '09*********';
 
   const menuItems = [
     { path: '/', label: 'داشبورد مدیریت', icon: LayoutDashboard },
@@ -64,14 +67,25 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </nav>
 
         {/* User Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-inner text-sm shrink-0">
-            مدیر
+        <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-inner text-sm shrink-0">
+              مدیر
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-slate-200 truncate">مدیر ارشد سیستم</p>
+              <p className="text-xs text-slate-400 font-mono truncate" dir="ltr">{adminPhone}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-200 truncate">مدیر ارشد سیستم</p>
-            <p className="text-xs text-slate-500 truncate" dir="ltr">admin@magicbook.ir</p>
-          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="خروج از حساب مدیریت"
+              className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </aside>
 

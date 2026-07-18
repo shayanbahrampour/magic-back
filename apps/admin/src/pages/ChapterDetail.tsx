@@ -11,7 +11,9 @@ import {
   X, 
   Image as ImageIcon, 
   Eye, 
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Loader2
 } from 'lucide-react';
 
 export const ChapterDetail: React.FC = () => {
@@ -31,6 +33,7 @@ export const ChapterDetail: React.FC = () => {
   const [textContent, setTextContent] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -72,6 +75,27 @@ export const ChapterDetail: React.FC = () => {
     setCurrentImageUrl('');
   };
 
+  const handleUploadImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setError('');
+    setUploadingImages(true);
+    try {
+      const res = await api.uploadFiles(Array.from(files));
+      // res.urls contains all uploaded urls
+      const newUrls = res.urls ? res.urls : [res.url];
+      const combined = [...imageUrls, ...newUrls].filter((item, index, self) => self.indexOf(item) === index);
+      setImageUrls(combined);
+      setSuccess(`${newUrls.length} تصویر با موفقیت در MinIO / S3 آپلود شد`);
+    } catch (err: any) {
+      setError(err.message || 'خطا در آپلود تصاویر به سرور');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = ''; // Reset input
+    }
+  };
+
   const handleRemoveImageUrl = (urlToRemove: string) => {
     setImageUrls(imageUrls.filter(url => url !== urlToRemove));
   };
@@ -91,6 +115,7 @@ export const ChapterDetail: React.FC = () => {
     setTextContent('');
     setImageUrls([]);
     setCurrentImageUrl('');
+    setUploadingImages(false);
     setError('');
     const nextPage = pages.length > 0 
       ? Math.max(...pages.map(p => p.page_number)) + 1 
@@ -238,17 +263,47 @@ export const ChapterDetail: React.FC = () => {
                 />
               </div>
 
-              {/* Image URL Input Adder */}
-              <div className="md:col-span-3">
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  لینک تصاویر (تصویرسازی‌های صفحه)
+              {/* Image Upload & URL Section */}
+              <div className="md:col-span-3 space-y-3">
+                <label className="block text-xs font-bold text-slate-500">
+                  تصاویر صفحه (آپلود مستقیم در MinIO / S3 یا افزودن دستی لینک)
                 </label>
+                
+                {/* Upload Button Zone */}
+                <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
+                  <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-2 shrink-0">
+                    {uploadingImages ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>در حال آپلود در MinIO / S3...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        <span>انتخاب و آپلود تصاویر (تکی یا گروهی)</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleUploadImages}
+                      disabled={uploadingImages}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-xs text-slate-500">
+                    یا می‌توانید آدرس تصویر را به‌صورت دستی در کادر زیر وارد کنید:
+                  </span>
+                </div>
+
+                {/* Manual Link Input */}
                 <div className="flex gap-2">
                   <input
                     type="url"
                     value={currentImageUrl}
                     onChange={(e) => setCurrentImageUrl(e.target.value)}
-                    placeholder="لینک تصویر، مثلا: https://example.com/image.jpg"
+                    placeholder="لینک تصویر خارجی، مثلا: https://example.com/image.jpg"
                     className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
                     dir="ltr"
                   />
@@ -263,26 +318,36 @@ export const ChapterDetail: React.FC = () => {
               </div>
             </div>
 
-            {/* List of Image URL Badges */}
+            {/* List of Image URL Cards/Badges */}
             {imageUrls.length > 0 && (
-              <div className="space-y-2">
-                <span className="block text-xs font-bold text-slate-500">
-                  تصاویر متصل‌شده به این صفحه ({imageUrls.length})
+              <div className="space-y-3 p-4 bg-slate-50/70 border border-slate-200 rounded-2xl">
+                <span className="block text-xs font-bold text-slate-600">
+                  تصاویر متصل‌شده به این صفحه ({imageUrls.length}) - برای حذف روی ضربدر کلیک کنید:
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {imageUrls.map((url, idx) => (
                     <div 
                       key={idx} 
-                      className="flex items-center gap-2 bg-indigo-50/70 text-indigo-700 text-xs font-bold pl-3 pr-2 py-1.5 rounded-xl border border-indigo-100 max-w-sm"
+                      className="relative group bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col"
                     >
-                      <span className="truncate flex-1 font-mono text-[11px]" dir="ltr">{url}</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleRemoveImageUrl(url)}
-                        className="text-slate-400 hover:text-indigo-900 bg-white hover:bg-indigo-100 rounded-lg p-0.5 shrink-0"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="h-28 bg-slate-100 overflow-hidden relative">
+                        <img
+                          src={url}
+                          alt={`Preview ${idx + 1}`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveImageUrl(url)}
+                          className="absolute top-1.5 right-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-full p-1.5 shadow transition"
+                          title="حذف این تصویر"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="p-2 text-[10px] font-mono text-slate-500 truncate bg-white" dir="ltr">
+                        {url}
+                      </div>
                     </div>
                   ))}
                 </div>

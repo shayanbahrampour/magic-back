@@ -1,12 +1,14 @@
 const BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5001/api' : '/api');
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('admin_token');
   const url = `${BASE_URL}${path}`;
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options?.headers,
     },
   });
@@ -14,6 +16,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const contentType = response.headers.get('content-type');
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_phone');
+      window.dispatchEvent(new Event('auth:unauthorized'));
+    }
     let errorMessage = `HTTP error! status: ${response.status}`;
     if (contentType && contentType.includes('application/json')) {
       const errorData = await response.json().catch(() => ({}));
@@ -56,6 +63,7 @@ export interface Book {
   author: string;
   short_description: string;
   full_description: string;
+  cover_image_url?: string | null;
   categories?: Category[];
 }
 
@@ -100,12 +108,12 @@ export const api = {
   },
   getBook: (id: number) => request<Book>(`/books/${id}`),
   getBookChapters: (bookId: number) => request<Chapter[]>(`/books/${bookId}/chapters`),
-  createBook: (data: { title: string; author: string; short_description: string; full_description: string; category_ids: number[] }) =>
+  createBook: (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[] }) =>
     request<Book>('/books', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateBook: (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; category_ids?: number[] }) =>
+  updateBook: (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[] }) =>
     request<Book>(`/books/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -157,4 +165,56 @@ export const api = {
     request<{ message: string }>(`/pages/${id}`, {
       method: 'DELETE',
     }),
+
+  // Auth
+  sendOtp: (phone: string) =>
+    request<{ message: string; phone: string }>('/auth/send-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
+  verifyOtp: (phone: string, otp: string) =>
+    request<{ message: string; token: string; user: { phone: string; role: string } }>('/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone, otp }),
+    }),
+
+  // Upload
+  uploadFile: async (file: File): Promise<{ url: string; urls: string[]; message: string }> => {
+    const token = localStorage.getItem('admin_token');
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${BASE_URL}/upload`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `خطا در آپلود فایل (Status: ${response.status})`);
+    }
+    return response.json();
+  },
+  uploadFiles: async (files: File[] | FileList): Promise<{ url: string; urls: string[]; message: string }> => {
+    const token = localStorage.getItem('admin_token');
+    const formData = new FormData();
+    Array.from(files).forEach((f) => formData.append('files', f));
+    const url = `${BASE_URL}/upload`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `خطا در آپلود فایل‌ها (Status: ${response.status})`);
+    }
+    return response.json();
+  },
 };

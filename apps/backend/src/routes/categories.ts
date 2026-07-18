@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/', async (req, res) => {
 });
 
 // ADMIN: GET /admin/categories/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
     const category = await prisma.category.findUnique({
@@ -32,7 +33,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ADMIN: POST /admin/categories
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Name is required' });
@@ -48,7 +49,7 @@ router.post('/', async (req, res) => {
 });
 
 // ADMIN: PUT /admin/categories/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { name } = req.body;
   if (!name || typeof name !== 'string') {
@@ -66,7 +67,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ADMIN: DELETE /admin/categories/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.category.delete({

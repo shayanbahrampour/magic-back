@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.get('/:id/pages', async (req, res) => {
 });
 
 // ADMIN: GET /chapters (List all chapters, with optional bookId query filter)
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const { bookId } = req.query;
   try {
     const filter = bookId ? { book_id: Number(bookId) } : {};
@@ -50,7 +51,7 @@ router.get('/', async (req, res) => {
 });
 
 // ADMIN: GET /chapters/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
     const chapter = await prisma.chapter.findUnique({
@@ -66,7 +67,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ADMIN: POST /chapters
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { book_id, title, chapter_order } = req.body;
   if (!book_id || !title || chapter_order === undefined) {
     return res.status(400).json({ error: 'book_id, title, and chapter_order are required' });
@@ -86,7 +87,7 @@ router.post('/', async (req, res) => {
 });
 
 // ADMIN: PUT /chapters/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const { book_id, title, chapter_order } = req.body;
   try {
@@ -105,7 +106,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ADMIN: DELETE /chapters/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.chapter.delete({

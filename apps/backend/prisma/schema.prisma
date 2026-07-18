@@ -22,6 +22,7 @@ model Book {
   author            String
   short_description String
   full_description  String
+  cover_image_url   String?
   categories        Category[]
   chapters          Chapter[]
 }

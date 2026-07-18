@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -67,8 +68,8 @@ router.get('/:id/chapters', async (req, res) => {
 });
 
 // ADMIN: POST /books (Create book)
-router.post('/', async (req, res) => {
-  const { title, author, short_description, full_description, category_ids } = req.body;
+router.post('/', requireAuth, async (req, res) => {
+  const { title, author, short_description, full_description, cover_image_url, category_ids } = req.body;
   if (!title || !author || !Array.isArray(category_ids) || category_ids.length === 0) {
     return res.status(400).json({ error: 'Title, author, and at least one category (category_ids array) are required' });
   }
@@ -79,6 +80,7 @@ router.post('/', async (req, res) => {
         author,
         short_description: short_description || '',
         full_description: full_description || '',
+        cover_image_url: cover_image_url || null,
         categories: {
           connect: category_ids.map((cid: number) => ({ id: Number(cid) })),
         },
@@ -95,9 +97,9 @@ router.post('/', async (req, res) => {
 });
 
 // ADMIN: PUT /books/:id (Update book)
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { title, author, short_description, full_description, category_ids } = req.body;
+  const { title, author, short_description, full_description, cover_image_url, category_ids } = req.body;
   try {
     const data: any = {
       title,
@@ -105,6 +107,10 @@ router.put('/:id', async (req, res) => {
       short_description,
       full_description,
     };
+
+    if (cover_image_url !== undefined) {
+      data.cover_image_url = cover_image_url || null;
+    }
 
     if (Array.isArray(category_ids)) {
       data.categories = {
@@ -127,7 +133,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ADMIN: DELETE /books/:id (Delete book)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   try {
     await prisma.book.delete({

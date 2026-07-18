@@ -9,6 +9,7 @@ export interface Book {
   author: string;
   short_description: string;
   full_description: string;
+  cover_image_url?: string | null;
   categories?: Category[];
 }
 
@@ -43,6 +44,7 @@ export interface CreateBookInput {
   author: string;
   short_description: string;
   full_description: string;
+  cover_image_url?: string | null;
   category_ids: number[];
 }
 
@@ -51,6 +53,7 @@ export interface UpdateBookInput {
   author?: string;
   short_description?: string;
   full_description?: string;
+  cover_image_url?: string | null;
   category_ids?: number[];
 }
 
