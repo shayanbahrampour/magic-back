@@ -6,18 +6,42 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...options?.headers,
     },
   });
 
+  const contentType = response.headers.get('content-type');
+
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    if (contentType && contentType.includes('application/json')) {
+      const errorData = await response.json().catch(() => ({}));
+      errorMessage = errorData.error || errorMessage;
+    } else {
+      const text = await response.text().catch(() => '');
+      if (text.includes('<!doctype') || text.includes('<html>')) {
+        errorMessage = `Server returned HTML (likely 404 or SPA redirect) instead of JSON for ${url}. Status: ${response.status}`;
+      } else {
+        errorMessage = text || errorMessage;
+      }
+    }
+    throw new Error(errorMessage);
   }
 
   // Handle deletion or empty responses
   if (response.status === 204) return {} as T;
+  
   const text = await response.text();
+  if (text.trim().startsWith('<!doctype') || text.trim().startsWith('<html') || text.trim().startsWith('<')) {
+    throw new Error(
+      `API error: Expected JSON response but received HTML from "${url}". ` +
+      `This usually happens when the API endpoint is incorrect (e.g. missing "/api" prefix) ` +
+      `or the backend server is misconfigured/down and redirected to the frontend's index.html. ` +
+      `Response preview (first 100 chars): ${text.trim().slice(0, 100)}`
+    );
+  }
+
   return text ? JSON.parse(text) : ({} as T);
 }
 
