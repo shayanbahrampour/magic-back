@@ -24,6 +24,7 @@ router.get('/:id/pages', async (req, res) => {
       return {
         ...page,
         image_urls: urls.map((u) => normalizeFileUrl(u, req) || u),
+        is_full_page: Boolean(page.is_full_page),
       };
     });
 

@@ -15,6 +15,7 @@ import {
   Upload,
   Loader2
 } from 'lucide-react';
+import { RichTextEditor, RichTextDisplay } from '../components/RichTextEditor';
 
 export const ChapterDetail: React.FC = () => {
   const { bookId, chapterId } = useParams<{ bookId: string; chapterId: string }>();
@@ -33,6 +34,7 @@ export const ChapterDetail: React.FC = () => {
   const [textContent, setTextContent] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [isFullPage, setIsFullPage] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
 
   const [error, setError] = useState('');
@@ -105,6 +107,7 @@ export const ChapterDetail: React.FC = () => {
     setPageNumber(page.page_number.toString());
     setTextContent(page.text_content || '');
     setImageUrls(page.image_urls);
+    setIsFullPage(Boolean(page.is_full_page));
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -115,6 +118,7 @@ export const ChapterDetail: React.FC = () => {
     setTextContent('');
     setImageUrls([]);
     setCurrentImageUrl('');
+    setIsFullPage(false);
     setUploadingImages(false);
     setError('');
     const nextPage = pages.length > 0 
@@ -138,6 +142,7 @@ export const ChapterDetail: React.FC = () => {
       page_number: Number(pageNumber),
       text_content: textContent.trim() || null,
       image_urls: imageUrls,
+      is_full_page: isFullPage,
     };
 
     try {
@@ -315,6 +320,26 @@ export const ChapterDetail: React.FC = () => {
                     افزودن لینک
                   </button>
                 </div>
+
+                {/* Checkbox for Full Page Image option */}
+                <div className="pt-2">
+                  <label className="inline-flex items-center gap-3 p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl cursor-pointer hover:bg-indigo-100/60 transition select-none w-full">
+                    <input
+                      type="checkbox"
+                      checked={isFullPage}
+                      onChange={(e) => setIsFullPage(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer shrink-0"
+                    />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-extrabold text-indigo-900">
+                        نمایش تصویر به‌صورت تمام‌صفحه (Full Page Image)
+                      </span>
+                      <span className="text-[11px] text-slate-600">
+                        با انتخاب این گزینه، تصویر صفحه در اپلیکیشن کلاینت به‌صورت تمام‌صفحه (Full Screen / Full Page) نمایش داده خواهد شد.
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -359,12 +384,10 @@ export const ChapterDetail: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 mb-2">
                 متن داستان
               </label>
-              <textarea
+              <RichTextEditor
                 value={textContent}
-                onChange={(e) => setTextContent(e.target.value)}
-                placeholder="متن داستان مربوط به این صفحه را بنویسید..."
-                rows={6}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition resize-none leading-relaxed"
+                onChange={setTextContent}
+                placeholder="متن داستان مربوط به این صفحه را بنویسید (با قابلیت بولد، ایتالیک، لیست و...)..."
               />
             </div>
 
@@ -407,6 +430,11 @@ export const ChapterDetail: React.FC = () => {
                     {page.page_number}
                   </span>
                   <span className="text-xs text-slate-400 font-bold">شناسه صفحه: {page.id}</span>
+                  {page.is_full_page && (
+                    <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-extrabold rounded-full border border-purple-200/80 shadow-sm flex items-center gap-1.5">
+                      <ImageIcon className="h-3 w-3" /> تصویر تمام‌صفحه (Full Page)
+                    </span>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -432,9 +460,7 @@ export const ChapterDetail: React.FC = () => {
                 <div className="lg:col-span-2 space-y-2">
                   <span className="block text-xs font-bold text-slate-500">متن داستان</span>
                   {page.text_content ? (
-                    <p className="text-sm text-slate-700 leading-relaxed font-normal bg-slate-50/50 p-4 rounded-2xl border border-slate-100 whitespace-pre-wrap">
-                      {page.text_content}
-                    </p>
+                    <RichTextDisplay content={page.text_content} />
                   ) : (
                     <p className="text-xs italic text-slate-400">بدون متن (این صفحه فقط حاوی تصویرسازی است).</p>
                   )}
@@ -442,9 +468,16 @@ export const ChapterDetail: React.FC = () => {
 
                 {/* Illustrations Preview */}
                 <div className="space-y-2">
-                  <span className="block text-xs font-bold text-slate-500 flex items-center gap-1.5">
-                    <ImageIcon className="h-3.5 w-3.5 shrink-0" /> تصاویر متصل ({page.image_urls.length})
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                      <ImageIcon className="h-3.5 w-3.5 shrink-0" /> تصاویر متصل ({page.image_urls.length})
+                    </span>
+                    {page.is_full_page && (
+                      <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                        حالت تمام‌صفحه
+                      </span>
+                    )}
+                  </div>
                   {page.image_urls.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {page.image_urls.map((url, idx) => (

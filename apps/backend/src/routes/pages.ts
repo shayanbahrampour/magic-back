@@ -17,6 +17,7 @@ function parsePageImages(page: any, req?: any) {
   return {
     ...page,
     image_urls: urls.map((u: string) => normalizeFileUrl(u, req) || u),
+    is_full_page: Boolean(page.is_full_page),
   };
 }
 
@@ -53,7 +54,7 @@ router.get('/:id', async (req, res) => {
 
 // ADMIN: POST /pages
 router.post('/', async (req, res) => {
-  const { chapter_id, page_number, text_content, image_urls } = req.body;
+  const { chapter_id, page_number, text_content, image_urls, is_full_page } = req.body;
   if (!chapter_id || page_number === undefined) {
     return res.status(400).json({ error: 'chapter_id and page_number are required' });
   }
@@ -68,6 +69,7 @@ router.post('/', async (req, res) => {
         page_number: Number(page_number),
         text_content: text_content || null,
         image_urls: urlsString,
+        is_full_page: Boolean(is_full_page),
       },
     });
     res.status(201).json(parsePageImages(newPage, req));
@@ -79,7 +81,7 @@ router.post('/', async (req, res) => {
 // ADMIN: PUT /pages/:id
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { chapter_id, page_number, text_content, image_urls } = req.body;
+  const { chapter_id, page_number, text_content, image_urls, is_full_page } = req.body;
   try {
     const data: any = {};
     if (chapter_id !== undefined) data.chapter_id = Number(chapter_id);
@@ -91,6 +93,7 @@ router.put('/:id', async (req, res) => {
         : [];
       data.image_urls = JSON.stringify(cleanUrls);
     }
+    if (is_full_page !== undefined) data.is_full_page = Boolean(is_full_page);
 
     const updatedPage = await prisma.page.update({
       where: { id: Number(id) },

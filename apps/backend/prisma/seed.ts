@@ -65,6 +65,7 @@ async function main() {
       page_number: 1,
       text_content: 'In the week before they departed for Arrakis, when all the final scurrying about had reached a nearly unbearable frenzy, an old crone came to visit the mother of the boy, Paul.',
       image_urls: JSON.stringify(['https://images.unsplash.com/photo-1547234935-80c7145ec969?auto=format&fit=crop&q=80&w=800']),
+      is_full_page: false,
     },
   });
 
@@ -74,6 +75,7 @@ async function main() {
       page_number: 2,
       text_content: 'The old woman was let in by the side door down the vaulted passage past Paul’s bedroom. She was allowed a moment to look in at him where he lay in his bed.',
       image_urls: JSON.stringify([]),
+      is_full_page: false,
     },
   });
 
@@ -84,6 +86,7 @@ async function main() {
       page_number: 1,
       text_content: 'Arrakis—planet of sand, of the desert, and of the giant sandworms. The heat was like a physical blow as they stepped off the ship.',
       image_urls: JSON.stringify(['https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&q=80&w=800']),
+      is_full_page: true,
     },
   });
 

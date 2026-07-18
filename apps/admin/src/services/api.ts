@@ -80,6 +80,7 @@ export interface Page {
   page_number: number;
   text_content: string | null;
   image_urls: string[];
+  is_full_page?: boolean;
 }
 
 function normalizeUrl(url?: string | null): string {
@@ -137,6 +138,7 @@ function normalizePage(page: Page): Page {
   return {
     ...page,
     image_urls: Array.isArray(page.image_urls) ? page.image_urls.map(normalizeUrl) : [],
+    is_full_page: Boolean(page.is_full_page),
   };
 }
 

@@ -27,6 +27,7 @@ export interface Page {
   page_number: number;
   text_content: string | null;
   image_urls: string[]; // store as json string in SQLite or string array in client
+  is_full_page: boolean;
   chapter?: Chapter;
 }
 
@@ -74,6 +75,7 @@ export interface CreatePageInput {
   page_number: number;
   text_content?: string | null;
   image_urls?: string[] | null;
+  is_full_page?: boolean;
 }
 
 export interface UpdatePageInput {
@@ -81,4 +83,5 @@ export interface UpdatePageInput {
   page_number?: number;
   text_content?: string | null;
   image_urls?: string[] | null;
+  is_full_page?: boolean;
 }

@@ -43,4 +43,5 @@ model Page {
   page_number  Int
   text_content String?
   image_urls   String  // Store JSON-serialized array of strings, e.g., '["url1", "url2"]'
+  is_full_page Boolean @default(false)
 }
