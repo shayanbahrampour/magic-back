@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "npm run dev:backend & npm run dev:admin",
+    "start": "npm run start:backend",
     "dev:backend": "npm run dev -w backend",
     "dev:admin": "npm run dev -w admin",
     "build:backend": "npm run build -w backend",
