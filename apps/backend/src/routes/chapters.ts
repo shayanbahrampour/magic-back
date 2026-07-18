@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
+import { normalizeFileUrl } from '../utils/s3';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get('/:id/pages', async (req, res) => {
       }
       return {
         ...page,
-        image_urls: urls,
+        image_urls: urls.map((u) => normalizeFileUrl(u, req) || u),
       };
     });
 

@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
+import { normalizeFileUrl } from '../utils/s3';
 
 const router = Router();
 router.use(requireAuth);
 
 // Function to safely parse image_urls from string back to array of strings
-function parsePageImages(page: any) {
+function parsePageImages(page: any, req?: any) {
   let urls: string[] = [];
   try {
     urls = page.image_urls ? JSON.parse(page.image_urls) : [];
@@ -15,7 +16,7 @@ function parsePageImages(page: any) {
   }
   return {
     ...page,
-    image_urls: urls,
+    image_urls: urls.map((u: string) => normalizeFileUrl(u, req) || u),
   };
 }
 
@@ -28,7 +29,7 @@ router.get('/', async (req, res) => {
       where: filter,
       orderBy: { page_number: 'asc' },
     });
-    res.json(pages.map(parsePageImages));
+    res.json(pages.map(p => parsePageImages(p, req)));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch pages' });
   }
@@ -44,7 +45,7 @@ router.get('/:id', async (req, res) => {
     if (!page) {
       return res.status(404).json({ error: 'Page not found' });
     }
-    res.json(parsePageImages(page));
+    res.json(parsePageImages(page, req));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch page' });
   }
@@ -57,7 +58,10 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'chapter_id and page_number are required' });
   }
   try {
-    const urlsString = Array.isArray(image_urls) ? JSON.stringify(image_urls) : JSON.stringify([]);
+    const cleanUrls = Array.isArray(image_urls)
+      ? image_urls.map((u: string) => normalizeFileUrl(u, req) || u)
+      : [];
+    const urlsString = JSON.stringify(cleanUrls);
     const newPage = await prisma.page.create({
       data: {
         chapter_id: Number(chapter_id),
@@ -66,7 +70,7 @@ router.post('/', async (req, res) => {
         image_urls: urlsString,
       },
     });
-    res.status(201).json(parsePageImages(newPage));
+    res.status(201).json(parsePageImages(newPage, req));
   } catch (error) {
     res.status(500).json({ error: 'Failed to create page' });
   }
@@ -82,14 +86,17 @@ router.put('/:id', async (req, res) => {
     if (page_number !== undefined) data.page_number = Number(page_number);
     if (text_content !== undefined) data.text_content = text_content;
     if (image_urls !== undefined) {
-      data.image_urls = Array.isArray(image_urls) ? JSON.stringify(image_urls) : JSON.stringify([]);
+      const cleanUrls = Array.isArray(image_urls)
+        ? image_urls.map((u: string) => normalizeFileUrl(u, req) || u)
+        : [];
+      data.image_urls = JSON.stringify(cleanUrls);
     }
 
     const updatedPage = await prisma.page.update({
       where: { id: Number(id) },
       data,
     });
-    res.json(parsePageImages(updatedPage));
+    res.json(parsePageImages(updatedPage, req));
   } catch (error) {
     res.status(500).json({ error: 'Failed to update page' });
   }

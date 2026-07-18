@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
+import { normalizeFileUrl } from '../utils/s3';
 
 const router = Router();
 
@@ -25,7 +26,11 @@ router.get('/', async (req, res) => {
       },
       orderBy: { id: 'desc' },
     });
-    res.json(books);
+    const normalized = books.map(b => ({
+      ...b,
+      cover_image_url: normalizeFileUrl(b.cover_image_url, req),
+    }));
+    res.json(normalized);
   } catch (error) {
     console.error('Failed to fetch books:', error);
     res.status(500).json({ error: 'Failed to fetch books' });
@@ -45,7 +50,11 @@ router.get('/:id', async (req, res) => {
     if (!book) {
       return res.status(404).json({ error: 'Book not found' });
     }
-    res.json(book);
+    const normalized = {
+      ...book,
+      cover_image_url: normalizeFileUrl(book.cover_image_url, req),
+    };
+    res.json(normalized);
   } catch (error) {
     console.error('Failed to fetch book:', error);
     res.status(500).json({ error: 'Failed to fetch book' });
@@ -74,13 +83,14 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Title, author, and at least one category (category_ids array) are required' });
   }
   try {
+    const cleanCoverUrl = normalizeFileUrl(cover_image_url, req);
     const newBook = await prisma.book.create({
       data: {
         title,
         author,
         short_description: short_description || '',
         full_description: full_description || '',
-        cover_image_url: cover_image_url || null,
+        cover_image_url: cleanCoverUrl || null,
         categories: {
           connect: category_ids.map((cid: number) => ({ id: Number(cid) })),
         },
@@ -89,7 +99,10 @@ router.post('/', requireAuth, async (req, res) => {
         categories: true,
       },
     });
-    res.status(201).json(newBook);
+    res.status(201).json({
+      ...newBook,
+      cover_image_url: normalizeFileUrl(newBook.cover_image_url, req),
+    });
   } catch (error) {
     console.error('Failed to create book:', error);
     res.status(500).json({ error: 'Failed to create book' });
@@ -109,7 +122,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     };
 
     if (cover_image_url !== undefined) {
-      data.cover_image_url = cover_image_url || null;
+      data.cover_image_url = normalizeFileUrl(cover_image_url, req) || null;
     }
 
     if (Array.isArray(category_ids)) {
@@ -125,7 +138,10 @@ router.put('/:id', requireAuth, async (req, res) => {
         categories: true,
       },
     });
-    res.json(updatedBook);
+    res.json({
+      ...updatedBook,
+      cover_image_url: normalizeFileUrl(updatedBook.cover_image_url, req),
+    });
   } catch (error) {
     console.error('Failed to update book:', error);
     res.status(500).json({ error: 'Failed to update book' });

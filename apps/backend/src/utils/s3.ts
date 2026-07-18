@@ -55,3 +55,55 @@ export function getAppPublicUrl(req: express.Request): string {
   const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || `localhost:${process.env.PORT || 5001}`;
   return `${protocol}://${host}`;
 }
+
+export function normalizeFileUrl(url: string | null | undefined, req?: express.Request): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  const baseUrl = req ? getAppPublicUrl(req) : '';
+
+  // If already pointing to /api/files/
+  if (trimmed.includes('/api/files/')) {
+    if (trimmed.startsWith('/api/files/')) {
+      return baseUrl ? `${baseUrl}${trimmed}` : trimmed;
+    }
+    // If it's an absolute URL that already has /api/files/, return as is
+    return trimmed;
+  }
+
+  const s3Info = getS3Client();
+  const bucket = s3Info?.bucket || process.env.S3_BUCKET || 'magicstore';
+
+  let key: string | null = null;
+
+  // Check if url is an absolute http/https or internal minio url
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed);
+      const path = parsed.pathname.replace(/^\/+/, '');
+      if (path.startsWith(`${bucket}/`)) {
+        key = path.slice(bucket.length + 1);
+      } else if (path.startsWith('uploads/') || path.includes('/uploads/')) {
+        const uploadIdx = path.indexOf('uploads/');
+        key = path.slice(uploadIdx);
+      } else if (parsed.port === '9000' || parsed.hostname.startsWith('10.') || parsed.hostname === 'localhost' || parsed.hostname === 'minio') {
+        // Any internal endpoint with port 9000 or private IP
+        key = path.startsWith(`${bucket}/`) ? path.slice(bucket.length + 1) : path;
+      }
+    } catch {
+      // Ignore URL parse errors
+    }
+  } else if (trimmed.startsWith(`/${bucket}/`) || trimmed.startsWith(`${bucket}/`)) {
+    const cleanPath = trimmed.replace(/^\/+/, '');
+    key = cleanPath.slice(bucket.length + 1);
+  } else if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+    key = trimmed.replace(/^\/+/, '');
+  }
+
+  if (key) {
+    return baseUrl ? `${baseUrl}/api/files/${key}` : `/api/files/${key}`;
+  }
+
+  return trimmed;
+}

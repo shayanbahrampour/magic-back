@@ -82,6 +82,72 @@ export interface Page {
   image_urls: string[];
 }
 
+function normalizeUrl(url?: string | null): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  const backendOrigin = import.meta.env.DEV ? 'http://localhost:5001' : '';
+
+  if (trimmed.includes('/api/files/')) {
+    if (trimmed.startsWith('/api/files/')) {
+      return `${backendOrigin}${trimmed}`;
+    }
+    return trimmed;
+  }
+
+  // If it's an internal string or matches http://10.220.4.2:9000/magicstore/uploads/... or http://localhost:9000/...
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.port === '9000' || parsed.hostname.startsWith('10.') || parsed.hostname === 'minio' || parsed.hostname === 'localhost' || parsed.pathname.includes('/magicstore/')) {
+        let path = parsed.pathname.replace(/^\/+/, '');
+        if (path.startsWith('magicstore/')) path = path.slice('magicstore/'.length);
+        if (path.startsWith('magicbook/')) path = path.slice('magicbook/'.length);
+        if (path.startsWith('uploads/') || path.includes('/uploads/')) {
+          const uploadIdx = path.indexOf('uploads/');
+          path = path.slice(uploadIdx);
+        }
+        return `${backendOrigin}/api/files/${path}`;
+      }
+    } catch {
+      // ignore parse errors
+    }
+  } else if (trimmed.startsWith('/magicstore/') || trimmed.startsWith('magicstore/')) {
+    const path = trimmed.replace(/^\/+/, '').slice('magicstore/'.length);
+    return `${backendOrigin}/api/files/${path}`;
+  } else if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) {
+    const path = trimmed.replace(/^\/+/, '');
+    return `${backendOrigin}/api/files/${path}`;
+  }
+
+  return trimmed;
+}
+
+function normalizeBook(book: Book): Book {
+  if (!book) return book;
+  return {
+    ...book,
+    cover_image_url: book.cover_image_url ? normalizeUrl(book.cover_image_url) : null,
+  };
+}
+
+function normalizePage(page: Page): Page {
+  if (!page) return page;
+  return {
+    ...page,
+    image_urls: Array.isArray(page.image_urls) ? page.image_urls.map(normalizeUrl) : [],
+  };
+}
+
+function normalizeUploadResponse(res: { url: string; urls: string[]; message: string }) {
+  return {
+    ...res,
+    url: normalizeUrl(res.url),
+    urls: Array.isArray(res.urls) ? res.urls.map(normalizeUrl) : [],
+  };
+}
+
 export const api = {
   // Categories CRUD
   getCategories: () => request<Category[]>('/categories'),
@@ -102,22 +168,30 @@ export const api = {
     }),
 
   // Books CRUD
-  getBooks: (categoryId?: number) => {
+  getBooks: async (categoryId?: number) => {
     const query = categoryId ? `?categoryId=${categoryId}` : '';
-    return request<Book[]>(`/books${query}`);
+    const books = await request<Book[]>(`/books${query}`);
+    return books.map(normalizeBook);
   },
-  getBook: (id: number) => request<Book>(`/books/${id}`),
+  getBook: async (id: number) => {
+    const book = await request<Book>(`/books/${id}`);
+    return normalizeBook(book);
+  },
   getBookChapters: (bookId: number) => request<Chapter[]>(`/books/${bookId}/chapters`),
-  createBook: (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[] }) =>
-    request<Book>('/books', {
+  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[] }) => {
+    const book = await request<Book>('/books', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
-  updateBook: (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[] }) =>
-    request<Book>(`/books/${id}`, {
+    });
+    return normalizeBook(book);
+  },
+  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[] }) => {
+    const book = await request<Book>(`/books/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
-    }),
+    });
+    return normalizeBook(book);
+  },
   deleteBook: (id: number) =>
     request<{ message: string }>(`/books/${id}`, {
       method: 'DELETE',
@@ -129,7 +203,10 @@ export const api = {
     return request<Chapter[]>(`/chapters${query}`);
   },
   getChapter: (id: number) => request<Chapter>(`/chapters/${id}`),
-  getChapterPages: (chapterId: number) => request<Page[]>(`/chapters/${chapterId}/pages`),
+  getChapterPages: async (chapterId: number) => {
+    const pages = await request<Page[]>(`/chapters/${chapterId}/pages`);
+    return pages.map(normalizePage);
+  },
   createChapter: (data: Omit<Chapter, 'id'>) =>
     request<Chapter>('/chapters', {
       method: 'POST',
@@ -146,21 +223,29 @@ export const api = {
     }),
 
   // Pages CRUD
-  getPages: (chapterId?: number) => {
+  getPages: async (chapterId?: number) => {
     const query = chapterId ? `?chapterId=${chapterId}` : '';
-    return request<Page[]>(`/pages${query}`);
+    const pages = await request<Page[]>(`/pages${query}`);
+    return pages.map(normalizePage);
   },
-  getPage: (id: number) => request<Page>(`/pages/${id}`),
-  createPage: (data: Omit<Page, 'id'>) =>
-    request<Page>('/pages', {
+  getPage: async (id: number) => {
+    const page = await request<Page>(`/pages/${id}`);
+    return normalizePage(page);
+  },
+  createPage: async (data: Omit<Page, 'id'>) => {
+    const page = await request<Page>('/pages', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
-  updatePage: (id: number, data: Partial<Omit<Page, 'id'>>) =>
-    request<Page>(`/pages/${id}`, {
+    });
+    return normalizePage(page);
+  },
+  updatePage: async (id: number, data: Partial<Omit<Page, 'id'>>) => {
+    const page = await request<Page>(`/pages/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
-    }),
+    });
+    return normalizePage(page);
+  },
   deletePage: (id: number) =>
     request<{ message: string }>(`/pages/${id}`, {
       method: 'DELETE',
@@ -196,7 +281,8 @@ export const api = {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `خطا در آپلود فایل (Status: ${response.status})`);
     }
-    return response.json();
+    const data = await response.json();
+    return normalizeUploadResponse(data);
   },
   uploadFiles: async (files: File[] | FileList): Promise<{ url: string; urls: string[]; message: string }> => {
     const token = localStorage.getItem('admin_token');
@@ -215,6 +301,7 @@ export const api = {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `خطا در آپلود فایل‌ها (Status: ${response.status})`);
     }
-    return response.json();
+    const data = await response.json();
+    return normalizeUploadResponse(data);
   },
 };
