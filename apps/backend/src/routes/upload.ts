@@ -28,7 +28,7 @@ function getS3Client() {
   // S3 bucket names must be lowercase and cannot contain slashes
   const cleanBucket = rawBucket.replace(/^\/+|\/+$/g, '').toLowerCase();
 
-  const rawPublicEndpoint = process.env.S3_PUBLIC_ENDPOINT || process.env.S3_PUBLIC_URL || endpoint;
+  const rawPublicEndpoint = process.env.S3_ENDPOINT || process.env.S3_PUBLIC_URL || endpoint;
   const cleanPublicEndpoint = (rawPublicEndpoint.startsWith('http') ? rawPublicEndpoint : `https://${rawPublicEndpoint}`).replace(/\/+$/, '');
 
   return {
