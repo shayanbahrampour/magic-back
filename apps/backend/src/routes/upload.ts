@@ -2,50 +2,15 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { S3Client, PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import { requireAuth } from '../middleware/auth';
+import { getS3Client, getAppPublicUrl } from '../utils/s3';
 
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB max file size
 });
-
-// Helper to get configured S3 client
-function getS3Client() {
-  const endpoint = process.env.S3_ENDPOINT || process.env.AWS_ENDPOINT_URL;
-  const accessKeyId = process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-
-  if (!endpoint || !accessKeyId || !secretAccessKey) {
-    return null;
-  }
-
-  const rawEndpoint = endpoint.startsWith('http') ? endpoint : `https://${endpoint}`;
-  const cleanEndpoint = rawEndpoint.replace(/\/+$/, ''); // Remove trailing slashes
-
-  const rawBucket = process.env.S3_BUCKET || process.env.AWS_BUCKET || 'magicbook';
-  // S3 bucket names must be lowercase and cannot contain slashes
-  const cleanBucket = rawBucket.replace(/^\/+|\/+$/g, '').toLowerCase();
-
-  const rawPublicEndpoint = process.env.S3_ENDPOINT || process.env.S3_PUBLIC_URL || endpoint;
-  const cleanPublicEndpoint = (rawPublicEndpoint.startsWith('http') ? rawPublicEndpoint : `https://${rawPublicEndpoint}`).replace(/\/+$/, '');
-
-  return {
-    client: new S3Client({
-      region: process.env.AWS_REGION || 'us-east-1',
-      endpoint: cleanEndpoint,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-      forcePathStyle: true, // Required for MinIO and PaaS S3-compatible object storage
-    }),
-    endpoint: cleanEndpoint,
-    publicEndpoint: cleanPublicEndpoint,
-    bucket: cleanBucket,
-  };
-}
 
 // POST /api/upload (single or multiple files)
 // Supports both `file` field (single) and `files` field (multiple)
@@ -97,7 +62,8 @@ router.post('/', requireAuth, upload.fields([{ name: 'file', maxCount: 1 }, { na
           }
         }
 
-        const publicUrl = `${s3Info.publicEndpoint}/${s3Info.bucket}/${filename}`;
+        const appPublicUrl = getAppPublicUrl(req);
+        const publicUrl = `${appPublicUrl}/api/files/${filename}`;
         uploadedUrls.push(publicUrl);
       } else {
         // Local dev fallback if S3 keys are missing
@@ -107,7 +73,8 @@ router.post('/', requireAuth, upload.fields([{ name: 'file', maxCount: 1 }, { na
         }
         const localFilepath = path.join(localDir, path.basename(filename));
         fs.writeFileSync(localFilepath, file.buffer);
-        uploadedUrls.push(`/uploads/${path.basename(filename)}`);
+        const appPublicUrl = getAppPublicUrl(req);
+        uploadedUrls.push(`${appPublicUrl}/api/files/${filename}`);
       }
     }
 

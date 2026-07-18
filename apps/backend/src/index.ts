@@ -8,6 +8,7 @@ import chaptersRouter from './routes/chapters';
 import pagesRouter from './routes/pages';
 import authRouter from './routes/auth';
 import uploadRouter from './routes/upload';
+import filesRouter from './routes/files';
 
 dotenv.config();
 
@@ -24,6 +25,8 @@ app.use(express.static(frontendPath));
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/files', filesRouter);
+app.use('/files', filesRouter);
 app.use('/api/categories', categoriesRouter);
 app.use('/api/books', booksRouter);
 app.use('/api/chapters', chaptersRouter);
@@ -36,7 +39,7 @@ app.get('/health', (req, res) => {
 
 // For any other request, serve index.html (SPA routing)
 app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/files')) {
     return next(); // Let it fall through to the default 404 handler
   }
   res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
