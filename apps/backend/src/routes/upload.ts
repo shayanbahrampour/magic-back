@@ -28,6 +28,9 @@ function getS3Client() {
   // S3 bucket names must be lowercase and cannot contain slashes
   const cleanBucket = rawBucket.replace(/^\/+|\/+$/g, '').toLowerCase();
 
+  const rawPublicEndpoint = process.env.S3_PUBLIC_ENDPOINT || process.env.S3_PUBLIC_URL || endpoint;
+  const cleanPublicEndpoint = (rawPublicEndpoint.startsWith('http') ? rawPublicEndpoint : `https://${rawPublicEndpoint}`).replace(/\/+$/, '');
+
   return {
     client: new S3Client({
       region: process.env.AWS_REGION || 'us-east-1',
@@ -39,6 +42,7 @@ function getS3Client() {
       forcePathStyle: true, // Required for MinIO and PaaS S3-compatible object storage
     }),
     endpoint: cleanEndpoint,
+    publicEndpoint: cleanPublicEndpoint,
     bucket: cleanBucket,
   };
 }
@@ -93,7 +97,7 @@ router.post('/', requireAuth, upload.fields([{ name: 'file', maxCount: 1 }, { na
           }
         }
 
-        const publicUrl = `${s3Info.endpoint}/${s3Info.bucket}/${filename}`;
+        const publicUrl = `${s3Info.publicEndpoint}/${s3Info.bucket}/${filename}`;
         uploadedUrls.push(publicUrl);
       } else {
         // Local dev fallback if S3 keys are missing
