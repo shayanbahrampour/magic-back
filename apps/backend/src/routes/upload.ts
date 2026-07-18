@@ -21,7 +21,12 @@ function getS3Client() {
     return null;
   }
 
-  const cleanEndpoint = endpoint.startsWith('http') ? endpoint : `https://${endpoint}`;
+  const rawEndpoint = endpoint.startsWith('http') ? endpoint : `https://${endpoint}`;
+  const cleanEndpoint = rawEndpoint.replace(/\/+$/, ''); // Remove trailing slashes
+
+  const rawBucket = process.env.S3_BUCKET || process.env.AWS_BUCKET || 'magicbook';
+  // S3 bucket names must be lowercase and cannot contain slashes
+  const cleanBucket = rawBucket.replace(/^\/+|\/+$/g, '').toLowerCase();
 
   return {
     client: new S3Client({
@@ -34,7 +39,7 @@ function getS3Client() {
       forcePathStyle: true, // Required for MinIO and PaaS S3-compatible object storage
     }),
     endpoint: cleanEndpoint,
-    bucket: process.env.S3_BUCKET || process.env.AWS_BUCKET || 'magicbook',
+    bucket: cleanBucket,
   };
 }
 
@@ -93,7 +98,11 @@ router.post('/', requireAuth, upload.fields([{ name: 'file', maxCount: 1 }, { na
     });
   } catch (error: any) {
     console.error('Upload error:', error);
-    res.status(500).json({ error: error.message || 'خطا در آپلود فایل به سرور یا MinIO' });
+    let errorMessage = error.message || 'خطا در آپلود فایل به سرور یا MinIO';
+    if (error.Code === 'InvalidBucketName' || error.name === 'InvalidBucketName' || (error.message && error.message.includes('InvalidBucketName'))) {
+      errorMessage = `نام باکت نامعتبر است (InvalidBucketName). طبق استانداردهای S3، نام باکت فقط باید شامل حروف کوچک انگلیسی، اعداد و خط‌تیره (-) باشد و نباید شامل حروف بزرگ (مثل MagicStore) یا اسلش (/) باشد. لطفاً نام باکت را در تنظیمات سرویس ابری و متغیر محیطی S3_BUCKET اصلاح کنید.`;
+    }
+    res.status(500).json({ error: errorMessage });
   }
 });
 
