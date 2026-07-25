@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "gerdoo": {
+      "command": "gerdoo",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

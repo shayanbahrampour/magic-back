@@ -8,6 +8,7 @@ import chaptersRouter from './routes/chapters';
 import pagesRouter from './routes/pages';
 import authRouter from './routes/auth';
 import userAuthRouter from './routes/userAuth';
+import progressRouter from './routes/progress';
 import uploadRouter from './routes/upload';
 import filesRouter from './routes/files';
 
@@ -26,6 +27,7 @@ app.use(express.static(frontendPath));
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/user', userAuthRouter);
+app.use('/api/user/progress', progressRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/files', filesRouter);
 app.use('/files', filesRouter);
