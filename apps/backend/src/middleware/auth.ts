@@ -22,6 +22,10 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     return res.status(401).json({ error: 'نشست شما منقضی شده است. لطفا مجددا وارد شوید.' });
   }
 
+  if (payload.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'دسترسی غیرمجاز. این بخش مخصوص مدیریت است.' });
+  }
+
   req.user = payload;
   next();
 }
