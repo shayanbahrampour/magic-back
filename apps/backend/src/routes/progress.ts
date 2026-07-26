@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
+import { recordActivity, getStats, XP } from '../services/gamification';
 
 const router = Router();
 
@@ -96,7 +97,17 @@ router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
       },
     });
 
-    res.json(shapeChapterProgress(chapterId, totalPages, saved));
+    // Reading keeps the daily streak alive; finishing a chapter for the first
+    // time additionally grants XP. `justCompleted` guards against re-awarding on
+    // repeat calls once the chapter is already marked complete.
+    const justCompleted = completed && !existing?.completed;
+    const stats = await recordActivity(userId, justCompleted ? XP.CHAPTER_COMPLETE : 0);
+
+    res.json({
+      ...shapeChapterProgress(chapterId, totalPages, saved),
+      xpAwarded: justCompleted ? XP.CHAPTER_COMPLETE : 0,
+      stats,
+    });
   } catch (error) {
     console.error('[PROGRESS] update chapter error:', error);
     res.status(500).json({ error: 'خطای داخلی سرور.' });
@@ -180,6 +191,78 @@ router.get('/books/:bookId', async (req: UserAuthRequest, res) => {
     });
   } catch (error) {
     console.error('[PROGRESS] get book error:', error);
+    res.status(500).json({ error: 'خطای داخلی سرور.' });
+  }
+});
+
+// GET /api/user/progress/stats
+// The user's gamification stats: total XP, current streak, longest streak, plus
+// a 12-week activity calendar (one entry per day the user was active).
+router.get('/stats', async (req: UserAuthRequest, res) => {
+  const userId = req.appUser!.id;
+  try {
+    const stats = await getStats(userId);
+
+    // Recent activity days for rendering a heatmap / calendar.
+    const since = new Date(Date.now() - 84 * 24 * 60 * 60 * 1000); // ~12 weeks
+    const activity = await prisma.dailyActivity.findMany({
+      where: { user_id: userId, date: { gte: since } },
+      orderBy: { date: 'asc' },
+      select: { date: true, xp_earned: true },
+    });
+
+    res.json({
+      ...stats,
+      activity: activity.map((a) => ({
+        date: a.date.toISOString().slice(0, 10),
+        xpEarned: a.xp_earned,
+      })),
+    });
+  } catch (error) {
+    console.error('[PROGRESS] stats error:', error);
+    res.status(500).json({ error: 'خطای داخلی سرور.' });
+  }
+});
+
+// GET /api/user/progress/continue
+// "Continue where you left off": the most recently updated, not-yet-completed
+// chapter, with enough context (book, chapter, resume page) for the app to jump
+// straight back in. Returns { hasProgress: false } if there is nothing to resume.
+router.get('/continue', async (req: UserAuthRequest, res) => {
+  const userId = req.appUser!.id;
+  try {
+    const latest = await prisma.readingProgress.findFirst({
+      where: { user_id: userId, completed: false },
+      orderBy: { updated_at: 'desc' },
+      include: { chapter: { include: { book: true } } },
+    });
+
+    if (!latest) {
+      return res.json({ hasProgress: false });
+    }
+
+    const totalPages = await prisma.page.count({ where: { chapter_id: latest.chapter_id } });
+
+    res.json({
+      hasProgress: true,
+      book: {
+        id: latest.chapter.book.id,
+        title: latest.chapter.book.title,
+        author: latest.chapter.book.author,
+        coverImageUrl: latest.chapter.book.cover_image_url ?? null,
+      },
+      chapter: {
+        id: latest.chapter.id,
+        title: latest.chapter.title,
+        chapterOrder: latest.chapter.chapter_order,
+      },
+      // Where to resume: the next unread page (furthest reached + 1), clamped to
+      // the chapter's last page.
+      resumePage: totalPages > 0 ? Math.min(latest.last_page + 1, totalPages) : latest.last_page,
+      ...shapeChapterProgress(latest.chapter_id, totalPages, latest),
+    });
+  } catch (error) {
+    console.error('[PROGRESS] continue error:', error);
     res.status(500).json({ error: 'خطای داخلی سرور.' });
   }
 });

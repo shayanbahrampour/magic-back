@@ -18,6 +18,9 @@ model User {
   created_at       DateTime          @default(now())
   updated_at       DateTime          @updatedAt
   reading_progress ReadingProgress[]
+  stats            UserStats?
+  daily_activity   DailyActivity[]
+  quiz_attempts    QuizAttempt[]
 }
 
 model Category {
@@ -45,6 +48,7 @@ model Chapter {
   chapter_order    Int
   pages            Page[]
   reading_progress ReadingProgress[]
+  quiz             Quiz?
 }
 
 // Per-user reading progress for a single chapter.
@@ -72,6 +76,93 @@ model Page {
   chapter      Chapter @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
   page_number  Int
   text_content String?
-  image_urls   String  // Store JSON-serialized array of strings, e.g., '["url1", "url2"]'
+  image_urls   String // Store JSON-serialized array of strings, e.g., '["url1", "url2"]'
   is_full_page Boolean @default(false)
+}
+
+// Aggregate gamification stats for a user. One row per user, created lazily on
+// the user's first tracked activity. `last_activity_date` is stored as the UTC
+// instant of Tehran-midnight for the day the user was last active, which lets us
+// compare "activity days" without a timezone library.
+model UserStats {
+  id                 Int       @id @default(autoincrement())
+  user_id            Int       @unique
+  user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  total_xp           Int       @default(0)
+  current_streak     Int       @default(0)
+  longest_streak     Int       @default(0)
+  last_activity_date DateTime?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+}
+
+// One row per (user, activity-day). `date` is the UTC instant of Tehran-midnight
+// for that day. Used to render the activity calendar and to power the streak.
+model DailyActivity {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  date       DateTime
+  xp_earned  Int      @default(0)
+  created_at DateTime @default(now())
+
+  @@unique([user_id, date])
+  @@index([user_id])
+}
+
+// A single quiz attached to a chapter (lesson). One quiz per chapter.
+model Quiz {
+  id         Int            @id @default(autoincrement())
+  chapter_id Int            @unique
+  chapter    Chapter        @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  title      String?
+  // Minimum fraction of correct answers (0..1) required to "pass" the quiz.
+  pass_ratio Float          @default(0.6)
+  questions  QuizQuestion[]
+  attempts   QuizAttempt[]
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+}
+
+model QuizQuestion {
+  id             Int          @id @default(autoincrement())
+  quiz_id        Int
+  quiz           Quiz         @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  prompt         String
+  options        String // JSON-serialized array of strings, e.g., '["A","B","C"]'
+  correct_index  Int
+  question_order Int          @default(0)
+  answers        QuizAnswer[]
+
+  @@index([quiz_id])
+}
+
+// One attempt of a quiz by a user. Users may attempt a quiz multiple times.
+model QuizAttempt {
+  id           Int          @id @default(autoincrement())
+  user_id      Int
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  quiz_id      Int
+  quiz         Quiz         @relation(fields: [quiz_id], references: [id], onDelete: Cascade)
+  score        Int // number of correct answers
+  total        Int // number of questions at attempt time
+  passed       Boolean      @default(false)
+  xp_awarded   Int          @default(0)
+  completed_at DateTime     @default(now())
+  answers      QuizAnswer[]
+
+  @@index([user_id])
+  @@index([quiz_id])
+}
+
+model QuizAnswer {
+  id             Int          @id @default(autoincrement())
+  attempt_id     Int
+  attempt        QuizAttempt  @relation(fields: [attempt_id], references: [id], onDelete: Cascade)
+  question_id    Int
+  question       QuizQuestion @relation(fields: [question_id], references: [id], onDelete: Cascade)
+  selected_index Int
+  is_correct     Boolean
+
+  @@index([attempt_id])
 }
