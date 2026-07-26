@@ -21,6 +21,7 @@ model User {
   stats            UserStats?
   daily_activity   DailyActivity[]
   quiz_attempts    QuizAttempt[]
+  bookmarks        Bookmark[]
 }
 
 model Category {
@@ -49,6 +50,7 @@ model Chapter {
   pages            Page[]
   reading_progress ReadingProgress[]
   quiz             Quiz?
+  bookmarks        Bookmark[]
 }
 
 // Per-user reading progress for a single chapter.
@@ -67,6 +69,21 @@ model ReadingProgress {
   updated_at   DateTime  @updatedAt
 
   @@unique([user_id, chapter_id])
+  @@index([user_id])
+}
+
+// A user's saved bookmark pointing at a specific page within a chapter. One row
+// per (user, chapter, page) so re-bookmarking the same page is idempotent.
+model Bookmark {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  chapter_id  Int
+  chapter     Chapter  @relation(fields: [chapter_id], references: [id], onDelete: Cascade)
+  page_number Int
+  created_at  DateTime @default(now())
+
+  @@unique([user_id, chapter_id, page_number])
   @@index([user_id])
 }
 
