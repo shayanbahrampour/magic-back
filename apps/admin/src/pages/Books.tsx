@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatToman } from '../services/api';
+import { api, formatToman, toPersianDigits } from '../services/api';
 import type { Book, Category } from '../services/api';
-import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon, Lock, Unlock } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon, Lock, Unlock, Sparkles } from 'lucide-react';
 
 export const Books: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -21,6 +21,9 @@ export const Books: React.FC = () => {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [isFree, setIsFree] = useState(true);
   const [priceToman, setPriceToman] = useState('');
+  // Points purchasing: the toggle mirrors "points_price > 0" on the server.
+  const [pointsEnabled, setPointsEnabled] = useState(false);
+  const [pointsPrice, setPointsPrice] = useState('');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -55,6 +58,8 @@ export const Books: React.FC = () => {
     setSelectedCategoryIds(book.categories ? book.categories.map((c) => c.id) : []);
     setIsFree(book.is_free);
     setPriceToman(book.price_toman ? String(book.price_toman) : '');
+    setPointsEnabled(Boolean(book.points_price));
+    setPointsPrice(book.points_price ? String(book.points_price) : '');
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -71,6 +76,8 @@ export const Books: React.FC = () => {
     setSelectedCategoryIds([]);
     setIsFree(true);
     setPriceToman('');
+    setPointsEnabled(false);
+    setPointsPrice('');
     setError('');
   };
 
@@ -111,6 +118,17 @@ export const Books: React.FC = () => {
       return;
     }
 
+    // A free book is never points-purchasable, so send 0 rather than a leftover value.
+    const points = !isFree && pointsEnabled ? Number(pointsPrice === '' ? 0 : pointsPrice) : 0;
+    if (!Number.isInteger(points) || points < 0) {
+      setError('امتیاز لازم باید یک عدد صحیح و نامنفی باشد');
+      return;
+    }
+    if (!isFree && pointsEnabled && points <= 0) {
+      setError('برای خرید با امتیاز باید تعداد امتیاز بزرگ‌تر از صفر تعیین کنید');
+      return;
+    }
+
     const payload = {
       title,
       author,
@@ -120,6 +138,7 @@ export const Books: React.FC = () => {
       category_ids: selectedCategoryIds,
       is_free: isFree,
       price_toman: price,
+      points_price: points,
     };
 
     try {
@@ -410,6 +429,48 @@ export const Books: React.FC = () => {
                     کاربران دارای اشتراک فعال بدون پرداخت این مبلغ به کتاب دسترسی دارند. برای رایگان
                     کردن تعدادی از فصل‌ها، به صفحه جزئیات کتاب بروید.
                   </p>
+
+                  {/* Points purchasing — independent of the toman price. */}
+                  <div className="mt-5 pt-5 border-t border-slate-200">
+                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={pointsEnabled}
+                        onChange={(e) => setPointsEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
+                        <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+                        خرید با امتیاز کاربران فعال باشد
+                      </span>
+                    </label>
+
+                    {pointsEnabled && (
+                      <div className="mt-3 animate-[fadeIn_0.2s_ease-out]">
+                        <label className="block text-xs font-bold text-slate-500 mb-2">
+                          امتیاز لازم برای خرید
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={pointsPrice}
+                          onChange={(e) => setPointsPrice(e.target.value)}
+                          placeholder="مثال: 500"
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 transition"
+                        />
+                        {pointsPrice !== '' && Number.isFinite(Number(pointsPrice)) && (
+                          <p className="text-xs text-indigo-600 font-bold mt-2">
+                            {toPersianDigits(Number(pointsPrice))} امتیاز
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                          کاربر می‌تواند این کتاب را با امتیازهایی که از مطالعه و آزمون‌ها به دست
+                          آورده باز کند. امتیاز مصرف‌شده از موجودی قابل خرج او کم می‌شود و دسترسی
+                          دائمی خواهد بود.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -502,9 +563,16 @@ export const Books: React.FC = () => {
                           <Unlock className="h-3 w-3" /> رایگان
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
-                          <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
+                            <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
+                          </span>
+                          {book.points_price > 0 && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">
+                              <Sparkles className="h-3 w-3" /> {toPersianDigits(book.points_price)} امتیاز
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 text-left space-x-2 space-x-reverse">

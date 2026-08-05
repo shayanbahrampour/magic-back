@@ -47,6 +47,10 @@ model Book {
   cover_image_url   String?
   is_free           Boolean        @default(true)
   price_toman       Int            @default(0)
+  // Cost in XP for buying this book with earned points. 0 (the default) means
+  // points cannot be used for it — one field rather than a flag plus an amount,
+  // so the two can never disagree. Only meaningful while `is_free` is false.
+  points_price      Int            @default(0)
   categories        Category[]
   chapters          Chapter[]
   purchases         BookPurchase[]
@@ -119,6 +123,10 @@ model UserStats {
   user_id            Int       @unique
   user               User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   total_xp           Int       @default(0)
+  // XP the user has redeemed (currently: buying books with points). `total_xp`
+  // stays a lifetime "earned" figure so streaks and history are never rewritten;
+  // the spendable balance is total_xp - spent_xp.
+  spent_xp           Int       @default(0)
   current_streak     Int       @default(0)
   longest_streak     Int       @default(0)
   last_activity_date DateTime?
@@ -231,14 +239,16 @@ model UserSubscription {
 
 // A one-off purchase granting permanent access to a single book. `price_toman`
 // records what the book cost at purchase time, so later price changes don't
-// rewrite history.
+// rewrite history. A purchase paid for with points records the XP charged in
+// `points_spent` and leaves `price_toman` at 0.
 model BookPurchase {
   id          Int      @id @default(autoincrement())
   user_id     Int
   user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   book_id     Int
   book        Book     @relation(fields: [book_id], references: [id], onDelete: Cascade)
-  price_toman Int      @default(0)
+  price_toman  Int     @default(0)
+  points_spent Int     @default(0)
   created_at  DateTime @default(now())
 
   @@unique([user_id, book_id])

@@ -10,7 +10,12 @@ export const XP = {
 };
 
 export type UserStatsShape = {
+  /** Lifetime XP earned. Never decreases — spending does not rewrite history. */
   totalXp: number;
+  /** XP already redeemed (e.g. books bought with points). */
+  spentXp: number;
+  /** What the user can actually spend right now: totalXp - spentXp. */
+  availableXp: number;
   currentStreak: number;
   longestStreak: number;
   lastActivityDate: Date | null;
@@ -33,12 +38,15 @@ export function liveStreak(
 
 function shapeStats(stats: {
   total_xp: number;
+  spent_xp: number;
   current_streak: number;
   longest_streak: number;
   last_activity_date: Date | null;
 }): UserStatsShape {
   return {
     totalXp: stats.total_xp,
+    spentXp: stats.spent_xp,
+    availableXp: Math.max(0, stats.total_xp - stats.spent_xp),
     currentStreak: liveStreak(stats.current_streak, stats.last_activity_date),
     longestStreak: stats.longest_streak,
     lastActivityDate: stats.last_activity_date,
@@ -105,7 +113,40 @@ export async function recordActivity(userId: number, xpToAward = 0): Promise<Use
 export async function getStats(userId: number): Promise<UserStatsShape> {
   const stats = await prisma.userStats.findUnique({ where: { user_id: userId } });
   if (!stats) {
-    return { totalXp: 0, currentStreak: 0, longestStreak: 0, lastActivityDate: null };
+    return {
+      totalXp: 0,
+      spentXp: 0,
+      availableXp: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActivityDate: null,
+    };
   }
   return shapeStats(stats);
+}
+
+/**
+ * Charges `amount` XP to the user's spendable balance.
+ *
+ * Returns false — changing nothing — when the balance is short, or when a
+ * concurrent spend moved it between the read and the write (the update is
+ * conditioned on the `spent_xp` value we read, so two racing purchases cannot
+ * both succeed off the same balance).
+ */
+export async function spendXp(userId: number, amount: number): Promise<boolean> {
+  const cost = Math.max(0, Math.floor(amount));
+  if (cost === 0) return true;
+
+  const stats = await prisma.userStats.findUnique({ where: { user_id: userId } });
+  if (!stats) return false;
+
+  const available = stats.total_xp - stats.spent_xp;
+  if (available < cost) return false;
+
+  const { count } = await prisma.userStats.updateMany({
+    where: { user_id: userId, spent_xp: stats.spent_xp },
+    data: { spent_xp: stats.spent_xp + cost },
+  });
+
+  return count === 1;
 }

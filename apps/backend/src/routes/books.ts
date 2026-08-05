@@ -4,7 +4,9 @@ import { requireAuth } from '../middleware/auth';
 import { optionalUser } from '../middleware/optionalUser';
 import { UserAuthRequest } from '../middleware/userAuth';
 import { normalizeFileUrl } from '../utils/s3';
-import { canReadChapter, getBookAccess, getBookAccessMap, isBookFree } from '../services/entitlements';
+import { canBuyWithPoints, canReadChapter, getBookAccess, getBookAccessMap, isBookFree } from '../services/entitlements';
+import { requireUser } from '../middleware/userAuth';
+import { getStats, spendXp } from '../services/gamification';
 
 const router = Router();
 
@@ -16,6 +18,10 @@ function normalizePrice(value: unknown): number | null {
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return null;
   return n;
 }
+
+// Points prices follow the same rules as toman prices: whole, non-negative, and
+// 0 meaning "points cannot buy this book".
+const normalizePointsPrice = normalizePrice;
 
 // CLIENT: GET /books (with optional categoryId filter)
 // Public, but personalised: `locked` reflects the caller's own entitlements when
@@ -49,6 +55,7 @@ router.get('/', optionalUser, async (req: UserAuthRequest, res) => {
         ...b,
         cover_image_url: normalizeFileUrl(b.cover_image_url, req),
         is_free: isBookFree(b),
+        can_buy_with_points: canBuyWithPoints(b),
         has_access: access.hasAccess,
         access_reason: access.reason,
         locked: !access.hasAccess,
@@ -80,6 +87,7 @@ router.get('/:id', optionalUser, async (req: UserAuthRequest, res) => {
       ...book,
       cover_image_url: normalizeFileUrl(book.cover_image_url, req),
       is_free: isBookFree(book),
+      can_buy_with_points: canBuyWithPoints(book),
       has_access: access.hasAccess,
       access_reason: access.reason,
       locked: !access.hasAccess,
@@ -125,15 +133,102 @@ router.get('/:id/chapters', optionalUser, async (req: UserAuthRequest, res) => {
   }
 });
 
+// CLIENT: POST /books/:id/purchase-with-points
+// Unlocks a book permanently by charging the caller's earned XP. Only books an
+// admin gave a points price to are eligible; money is never involved here.
+router.post('/:id/purchase-with-points', requireUser, async (req: UserAuthRequest, res) => {
+  const userId = req.appUser!.id;
+  const bookId = Number(req.params.id);
+
+  if (!Number.isInteger(bookId)) {
+    return res.status(400).json({ error: 'شناسه کتاب معتبر نیست.' });
+  }
+
+  try {
+    const book = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: { id: true, title: true, is_free: true, price_toman: true, points_price: true },
+    });
+    if (!book) {
+      return res.status(404).json({ error: 'کتاب یافت نشد.' });
+    }
+
+    if (isBookFree(book)) {
+      return res.status(400).json({ error: 'این کتاب رایگان است و نیازی به خرید ندارد.' });
+    }
+
+    if (!canBuyWithPoints(book)) {
+      return res.status(400).json({ error: 'این کتاب با امتیاز قابل خریداری نیست.' });
+    }
+
+    const owned = await prisma.bookPurchase.findUnique({
+      where: { user_id_book_id: { user_id: userId, book_id: bookId } },
+      select: { id: true },
+    });
+    if (owned) {
+      return res.status(409).json({ error: 'این کتاب را قبلاً خریده‌اید.' });
+    }
+
+    const stats = await getStats(userId);
+    if (stats.availableXp < book.points_price) {
+      return res.status(400).json({
+        error: `امتیاز شما کافی نیست. برای این کتاب ${book.points_price} امتیاز لازم است و شما ${stats.availableXp} امتیاز دارید.`,
+        availableXp: stats.availableXp,
+        pointsPrice: book.points_price,
+      });
+    }
+
+    // Charge first: a failed charge must not hand out the book, and the charge
+    // is conditioned on the balance we just read, so a double-tap can't spend
+    // the same points twice.
+    const charged = await spendXp(userId, book.points_price);
+    if (!charged) {
+      return res.status(409).json({ error: 'امتیاز شما کافی نیست. لطفاً دوباره تلاش کنید.' });
+    }
+
+    try {
+      await prisma.bookPurchase.create({
+        data: {
+          user_id: userId,
+          book_id: bookId,
+          price_toman: 0,
+          points_spent: book.points_price,
+        },
+      });
+    } catch (createErr) {
+      // Refund rather than leave the user charged for a book they didn't get.
+      await prisma.userStats.update({
+        where: { user_id: userId },
+        data: { spent_xp: { decrement: book.points_price } },
+      });
+      throw createErr;
+    }
+
+    const fresh = await getStats(userId);
+    return res.status(201).json({
+      message: 'کتاب با امتیاز شما خریداری شد. مطالعه‌ی خوبی داشته باشید!',
+      pointsSpent: book.points_price,
+      availableXp: fresh.availableXp,
+    });
+  } catch (error) {
+    console.error('[BOOKS] purchase-with-points error:', error);
+    return res.status(500).json({ error: 'خطای داخلی سرور. لطفاً دوباره تلاش کنید.' });
+  }
+});
+
 // ADMIN: POST /books (Create book)
 router.post('/', requireAuth, async (req, res) => {
-  const { title, author, short_description, full_description, cover_image_url, category_ids, is_free, price_toman } = req.body;
+  const { title, author, short_description, full_description, cover_image_url, category_ids, is_free, price_toman, points_price } = req.body;
   if (!title || !author || !Array.isArray(category_ids) || category_ids.length === 0) {
     return res.status(400).json({ error: 'Title, author, and at least one category (category_ids array) are required' });
   }
   const price = normalizePrice(price_toman);
   if (price === null) {
     return res.status(400).json({ error: 'قیمت باید یک عدد صحیح و نامنفی (به تومان) باشد.' });
+  }
+  const pointsPrice = normalizePointsPrice(points_price);
+  if (pointsPrice === null) {
+    return res.status(400).json({ error: 'امتیاز لازم باید یک عدد صحیح و نامنفی باشد.' });
   }
   const free = is_free === undefined ? price <= 0 : Boolean(is_free);
   if (!free && price <= 0) {
@@ -150,6 +245,8 @@ router.post('/', requireAuth, async (req, res) => {
         cover_image_url: cleanCoverUrl || null,
         is_free: free,
         price_toman: price,
+        // A free book can never be points-purchasable, so don't store a stale cost.
+        points_price: free ? 0 : pointsPrice,
         categories: {
           connect: category_ids.map((cid: number) => ({ id: Number(cid) })),
         },
@@ -171,7 +268,7 @@ router.post('/', requireAuth, async (req, res) => {
 // ADMIN: PUT /books/:id (Update book)
 router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { title, author, short_description, full_description, cover_image_url, category_ids, is_free, price_toman } = req.body;
+  const { title, author, short_description, full_description, cover_image_url, category_ids, is_free, price_toman, points_price } = req.body;
   try {
     const data: any = {
       title,
@@ -191,6 +288,13 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
       data.price_toman = price;
     }
+    if (points_price !== undefined) {
+      const pointsPrice = normalizePointsPrice(points_price);
+      if (pointsPrice === null) {
+        return res.status(400).json({ error: 'امتیاز لازم باید یک عدد صحیح و نامنفی باشد.' });
+      }
+      data.points_price = pointsPrice;
+    }
     if (is_free !== undefined) {
       data.is_free = Boolean(is_free);
     }
@@ -208,6 +312,10 @@ router.put('/:id', requireAuth, async (req, res) => {
     const nextPrice = data.price_toman ?? existing.price_toman;
     if (!nextFree && nextPrice <= 0) {
       return res.status(400).json({ error: 'برای کتاب غیررایگان باید قیمتی بزرگ‌تر از صفر تعیین شود.' });
+    }
+    // Turning a book free clears any points cost, so the two can't disagree.
+    if (nextFree) {
+      data.points_price = 0;
     }
 
     if (Array.isArray(category_ids)) {

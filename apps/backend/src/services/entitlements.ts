@@ -15,6 +15,18 @@ export function isBookFree(book: { is_free: boolean; price_toman: number }): boo
   return book.is_free || book.price_toman <= 0;
 }
 
+/**
+ * True when a paid book may be unlocked with earned XP. A points price only
+ * counts while the book is actually paid — a free book needs no unlocking.
+ */
+export function canBuyWithPoints(book: {
+  is_free: boolean;
+  price_toman: number;
+  points_price: number;
+}): boolean {
+  return !isBookFree(book) && book.points_price > 0;
+}
+
 /** True when the user has any subscription window covering this instant. */
 export async function hasActiveSubscription(
   userId: number | null | undefined,

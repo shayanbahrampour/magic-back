@@ -68,6 +68,10 @@ export interface Book {
   /** When false the book is paid and `price_toman` applies. */
   is_free: boolean;
   price_toman: number;
+  /** XP cost for unlocking this book with points. 0 = points not accepted. */
+  points_price: number;
+  /** Server-derived: true when the book is paid and has a points price. */
+  can_buy_with_points?: boolean;
 }
 
 export interface Chapter {
@@ -212,14 +216,14 @@ export const api = {
     return normalizeBook(book);
   },
   getBookChapters: (bookId: number) => request<Chapter[]>(`/books/${bookId}/chapters`),
-  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[]; is_free?: boolean; price_toman?: number }) => {
+  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[]; is_free?: boolean; price_toman?: number; points_price?: number }) => {
     const book = await request<Book>('/books', {
       method: 'POST',
       body: JSON.stringify(data),
     });
     return normalizeBook(book);
   },
-  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[]; is_free?: boolean; price_toman?: number }) => {
+  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[]; is_free?: boolean; price_toman?: number; points_price?: number }) => {
     const book = await request<Book>(`/books/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
