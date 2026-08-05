@@ -1,9 +1,22 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
+import multer from 'multer';
 import prisma from '../db';
 import { signToken, verifyToken } from '../utils/jwt';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
+import { normalizeFileUrl } from '../utils/s3';
+import { describeUploadError, storeFile } from '../utils/storage';
 
 const router = Router();
+
+// Avatars are small; cap them well below the admin upload limit.
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('فقط فایل تصویری مجاز است.'));
+  },
+});
 
 const IRAN_PHONE_REGEX = /^09\d{9}$/;
 
@@ -16,13 +29,31 @@ function normalizePhone(input: unknown): string | null {
   return IRAN_PHONE_REGEX.test(clean) ? clean : null;
 }
 
-function toPublicUser(user: { id: number; phone: string; first_name: string; last_name: string }) {
+function toPublicUser(
+  user: {
+    id: number;
+    phone: string;
+    first_name: string;
+    last_name: string;
+    avatar_url?: string | null;
+  },
+  req?: express.Request
+) {
   return {
     id: user.id,
     phone: user.phone,
     firstName: user.first_name,
     lastName: user.last_name,
+    avatarUrl: normalizeFileUrl(user.avatar_url, req),
   };
+}
+
+/** Validates a name field from a request body. Returns null when unusable. */
+function cleanName(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.length > 60) return null;
+  return trimmed;
 }
 
 // POST /api/user/send-otp  { phone }
@@ -69,7 +100,7 @@ router.post('/verify-otp', async (req, res) => {
         message: 'ورود با موفقیت انجام شد.',
         isNewUser: false,
         token,
-        user: toPublicUser(user),
+        user: toPublicUser(user, req),
       });
     }
 
@@ -127,7 +158,7 @@ router.post('/complete-profile', async (req, res) => {
       return res.json({
         message: 'ورود با موفقیت انجام شد.',
         token,
-        user: toPublicUser(existing),
+        user: toPublicUser(existing, req),
       });
     }
 
@@ -140,7 +171,7 @@ router.post('/complete-profile', async (req, res) => {
     return res.status(201).json({
       message: 'ثبت‌نام و ورود با موفقیت انجام شد.',
       token,
-      user: toPublicUser(user),
+      user: toPublicUser(user, req),
     });
   } catch (error) {
     console.error('[USER-AUTH] complete-profile error:', error);
@@ -155,11 +186,83 @@ router.get('/me', requireUser, async (req: UserAuthRequest, res) => {
     if (!user) {
       return res.status(404).json({ error: 'کاربر یافت نشد.' });
     }
-    res.json({ user: toPublicUser(user) });
+    res.json({ user: toPublicUser(user, req) });
   } catch (error) {
     console.error('[USER-AUTH] me error:', error);
     res.status(500).json({ error: 'خطای داخلی سرور.' });
   }
+});
+
+// PATCH /api/user/me  { firstName?, lastName?, avatarUrl? }
+// Updates the caller's own profile. Only the fields present in the body change;
+// passing `avatarUrl: null` removes the current picture. The phone number is
+// deliberately not editable here — it identifies the account.
+router.patch('/me', requireUser, async (req: UserAuthRequest, res) => {
+  const { firstName, lastName, avatarUrl } = req.body ?? {};
+  const data: { first_name?: string; last_name?: string; avatar_url?: string | null } = {};
+
+  if (firstName !== undefined) {
+    const clean = cleanName(firstName);
+    if (!clean) return res.status(400).json({ error: 'نام معتبر نیست.' });
+    data.first_name = clean;
+  }
+
+  if (lastName !== undefined) {
+    const clean = cleanName(lastName);
+    if (!clean) return res.status(400).json({ error: 'نام خانوادگی معتبر نیست.' });
+    data.last_name = clean;
+  }
+
+  if (avatarUrl !== undefined) {
+    if (avatarUrl === null || avatarUrl === '') {
+      data.avatar_url = null;
+    } else if (typeof avatarUrl === 'string') {
+      data.avatar_url = avatarUrl.trim();
+    } else {
+      return res.status(400).json({ error: 'آدرس تصویر معتبر نیست.' });
+    }
+  }
+
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({ error: 'هیچ تغییری ارسال نشده است.' });
+  }
+
+  try {
+    const user = await prisma.user.update({ where: { id: req.appUser!.id }, data });
+    res.json({ message: 'پروفایل با موفقیت به‌روزرسانی شد.', user: toPublicUser(user, req) });
+  } catch (error) {
+    console.error('[USER-AUTH] update profile error:', error);
+    res.status(500).json({ error: 'خطای داخلی سرور.' });
+  }
+});
+
+// POST /api/user/me/avatar  (multipart, field `file`)
+// Stores the image and points the caller's profile at it in one round-trip.
+router.post('/me/avatar', requireUser, (req: UserAuthRequest, res) => {
+  avatarUpload.single('file')(req, res, async (uploadErr: any) => {
+    if (uploadErr) {
+      const tooLarge = uploadErr.code === 'LIMIT_FILE_SIZE';
+      return res.status(400).json({
+        error: tooLarge ? 'حجم تصویر باید کمتر از ۵ مگابایت باشد.' : uploadErr.message || 'آپلود تصویر ناموفق بود.',
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'تصویری ارسال نشده است.' });
+    }
+
+    try {
+      const url = await storeFile(req.file, req, 'avatars');
+      const user = await prisma.user.update({
+        where: { id: req.appUser!.id },
+        data: { avatar_url: url },
+      });
+      res.json({ message: 'تصویر پروفایل به‌روزرسانی شد.', user: toPublicUser(user, req) });
+    } catch (error: any) {
+      console.error('[USER-AUTH] avatar upload error:', error);
+      res.status(500).json({ error: describeUploadError(error) });
+    }
+  });
 });
 
 export default router;
