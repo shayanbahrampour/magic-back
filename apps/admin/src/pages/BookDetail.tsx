@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, formatToman } from '../services/api';
 import type { Book, Chapter } from '../services/api';
-import { 
-  ArrowRight, 
-  Layers, 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  ChevronLeft, 
-  X, 
-  BookOpen, 
-  Layers3
+import {
+  ArrowRight,
+  Layers,
+  Plus,
+  Trash2,
+  Edit2,
+  ChevronLeft,
+  X,
+  BookOpen,
+  Layers3,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 export const BookDetail: React.FC = () => {
@@ -114,6 +116,27 @@ export const BookDetail: React.FC = () => {
     }
   };
 
+  // Free-preview toggle. Only meaningful for a paid book — every chapter of a
+  // free book is readable regardless of this flag.
+  const handleToggleFree = async (chapter: Chapter) => {
+    setError('');
+    setSuccess('');
+    try {
+      await api.updateChapter(chapter.id, { is_free: !chapter.is_free });
+      // Update in place so the list doesn't jump while the admin toggles.
+      setChapters((prev) =>
+        prev.map((c) => (c.id === chapter.id ? { ...c, is_free: !c.is_free } : c))
+      );
+      setSuccess(
+        chapter.is_free
+          ? `فصل «${chapter.title}» دیگر رایگان نیست.`
+          : `فصل «${chapter.title}» به‌عنوان پیش‌نمایش رایگان تنظیم شد.`
+      );
+    } catch (err: any) {
+      setError(err.message || 'خطا در تغییر وضعیت رایگان بودن فصل');
+    }
+  };
+
   const handleDelete = async (chapterId: number) => {
     if (!window.confirm('آیا از حذف این فصل اطمینان دارید؟ تمامی صفحات داخل این فصل نیز برای همیشه حذف خواهند شد.')) {
       return;
@@ -174,6 +197,15 @@ export const BookDetail: React.FC = () => {
               </span>
             )}
             <span className="text-xs text-slate-400 font-medium ml-2">شناسه کتاب: {book.id}</span>
+            {book.is_free ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                <Unlock className="h-3 w-3" /> رایگان
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
+                <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
+              </span>
+            )}
           </div>
           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{book.title}</h2>
           <p className="text-sm font-bold text-slate-500">اثر {book.author}</p>
@@ -326,11 +358,36 @@ export const BookDetail: React.FC = () => {
                     {chapter.chapter_order}
                   </span>
                   <div>
-                    <h4 className="font-bold text-slate-800 text-sm">{chapter.title}</h4>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-slate-800 text-sm">{chapter.title}</h4>
+                      {!book.is_free && chapter.is_free && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                          <Unlock className="h-2.5 w-2.5" /> پیش‌نمایش رایگان
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-400 mt-0.5">شناسه فصل: {chapter.id}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {!book.is_free && (
+                    <button
+                      onClick={() => handleToggleFree(chapter)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition border ${
+                        chapter.is_free
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100'
+                          : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title={
+                        chapter.is_free
+                          ? 'این فصل رایگان است — برای قفل کردن کلیک کنید'
+                          : 'این فصل قفل است — برای رایگان کردن کلیک کنید'
+                      }
+                    >
+                      {chapter.is_free ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                      <span>{chapter.is_free ? 'رایگان' : 'قفل'}</span>
+                    </button>
+                  )}
                   <Link
                     to={`/books/${bookId}/chapters/${chapter.id}`}
                     className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition"

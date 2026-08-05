@@ -11,6 +11,7 @@ import userAuthRouter from './routes/userAuth';
 import progressRouter from './routes/progress';
 import bookmarksRouter from './routes/bookmarks';
 import quizRouter from './routes/quiz';
+import subscriptionsRouter from './routes/subscriptions';
 import uploadRouter from './routes/upload';
 import filesRouter from './routes/files';
 
@@ -32,6 +33,7 @@ app.use('/api/user', userAuthRouter);
 app.use('/api/user/progress', progressRouter);
 app.use('/api/user/bookmarks', bookmarksRouter);
 app.use('/api/quiz', quizRouter);
+app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/files', filesRouter);
 app.use('/files', filesRouter);

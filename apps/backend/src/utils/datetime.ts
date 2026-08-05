@@ -25,4 +25,12 @@ export function tehranDayStart(date: Date = new Date()): Date {
   return dayIndexToDate(tehranDayIndex(date));
 }
 
+// `YYYY-MM-DD` for the Tehran calendar day the given instant falls on. Note that
+// a stored day-start is Tehran-midnight expressed in UTC, which always lands on
+// the *previous* UTC date — so slicing its ISO string directly would be a day
+// early. Shift by the offset first.
+export function tehranDayKey(date: Date): string {
+  return new Date(date.getTime() + OFFSET_MS).toISOString().slice(0, 10);
+}
+
 export { DAY_MS };

@@ -65,6 +65,9 @@ export interface Book {
   full_description: string;
   cover_image_url?: string | null;
   categories?: Category[];
+  /** When false the book is paid and `price_toman` applies. */
+  is_free: boolean;
+  price_toman: number;
 }
 
 export interface Chapter {
@@ -72,6 +75,35 @@ export interface Chapter {
   book_id: number;
   title: string;
   chapter_order: number;
+  /** Free preview chapter inside a paid book. */
+  is_free: boolean;
+}
+
+export interface SubscriptionPlan {
+  id: number;
+  title: string;
+  durationMonths: number;
+  priceToman: number;
+  isActive: boolean;
+}
+
+export type SubscriptionPlanInput = {
+  title?: string;
+  durationMonths: number;
+  priceToman: number;
+  isActive?: boolean;
+};
+
+/** Groups a toman amount in threes for display, e.g. 1500000 → «۱٬۵۰۰٬۰۰۰ تومان». */
+export function formatToman(amount: number): string {
+  const grouped = Math.max(0, Math.trunc(amount)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '٬');
+  return `${toPersianDigits(grouped)} تومان`;
+}
+
+const PERSIAN_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+
+export function toPersianDigits(value: number | string): string {
+  return String(value).replace(/[0-9]/g, (d) => PERSIAN_DIGITS[Number(d)]);
 }
 
 export interface Page {
@@ -180,14 +212,14 @@ export const api = {
     return normalizeBook(book);
   },
   getBookChapters: (bookId: number) => request<Chapter[]>(`/books/${bookId}/chapters`),
-  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[] }) => {
+  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[]; is_free?: boolean; price_toman?: number }) => {
     const book = await request<Book>('/books', {
       method: 'POST',
       body: JSON.stringify(data),
     });
     return normalizeBook(book);
   },
-  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[] }) => {
+  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[]; is_free?: boolean; price_toman?: number }) => {
     const book = await request<Book>(`/books/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -209,7 +241,8 @@ export const api = {
     const pages = await request<Page[]>(`/chapters/${chapterId}/pages`);
     return pages.map(normalizePage);
   },
-  createChapter: (data: Omit<Chapter, 'id'>) =>
+  // `is_free` defaults to false server-side, so new chapters start locked.
+  createChapter: (data: Omit<Chapter, 'id' | 'is_free'> & { is_free?: boolean }) =>
     request<Chapter>('/chapters', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -250,6 +283,26 @@ export const api = {
   },
   deletePage: (id: number) =>
     request<{ message: string }>(`/pages/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Subscription plans
+  getSubscriptionPlans: async () => {
+    const res = await request<{ plans: SubscriptionPlan[] }>('/subscriptions/plans/all');
+    return res.plans;
+  },
+  createSubscriptionPlan: (data: SubscriptionPlanInput) =>
+    request<SubscriptionPlan>('/subscriptions/plans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateSubscriptionPlan: (id: number, data: Partial<SubscriptionPlanInput>) =>
+    request<SubscriptionPlan>(`/subscriptions/plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteSubscriptionPlan: (id: number) =>
+    request<{ message: string; archived: boolean }>(`/subscriptions/plans/${id}`, {
       method: 'DELETE',
     }),
 

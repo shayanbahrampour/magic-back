@@ -5,6 +5,7 @@ import {
   Tag, 
   BookOpen, 
   BookMarked,
+  CreditCard,
   Sparkles,
   LogOut
 } from 'lucide-react';
@@ -22,6 +23,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
     { path: '/', label: 'داشبورد مدیریت', icon: LayoutDashboard },
     { path: '/categories', label: 'دسته‌بندی‌ها', icon: Tag },
     { path: '/books', label: 'فهرست کتاب‌ها', icon: BookOpen },
+    { path: '/subscriptions', label: 'پلن‌های اشتراک', icon: CreditCard },
   ];
 
   return (

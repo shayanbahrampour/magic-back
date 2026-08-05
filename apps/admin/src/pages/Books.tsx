@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, formatToman } from '../services/api';
 import type { Book, Category } from '../services/api';
-import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon, Lock, Unlock } from 'lucide-react';
 
 export const Books: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -19,6 +19,8 @@ export const Books: React.FC = () => {
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [uploadingCover, setUploadingCover] = useState(false);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
+  const [isFree, setIsFree] = useState(true);
+  const [priceToman, setPriceToman] = useState('');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -51,6 +53,8 @@ export const Books: React.FC = () => {
     setFullDesc(book.full_description);
     setCoverImageUrl(book.cover_image_url || '');
     setSelectedCategoryIds(book.categories ? book.categories.map((c) => c.id) : []);
+    setIsFree(book.is_free);
+    setPriceToman(book.price_toman ? String(book.price_toman) : '');
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -65,6 +69,8 @@ export const Books: React.FC = () => {
     setCoverImageUrl('');
     setUploadingCover(false);
     setSelectedCategoryIds([]);
+    setIsFree(true);
+    setPriceToman('');
     setError('');
   };
 
@@ -95,6 +101,16 @@ export const Books: React.FC = () => {
       return;
     }
 
+    const price = priceToman === '' ? 0 : Number(priceToman);
+    if (!Number.isInteger(price) || price < 0) {
+      setError('قیمت باید یک عدد صحیح و نامنفی (به تومان) باشد');
+      return;
+    }
+    if (!isFree && price <= 0) {
+      setError('برای کتاب غیررایگان باید قیمتی بزرگ‌تر از صفر تعیین کنید');
+      return;
+    }
+
     const payload = {
       title,
       author,
@@ -102,6 +118,8 @@ export const Books: React.FC = () => {
       full_description: fullDesc,
       cover_image_url: coverImageUrl || null,
       category_ids: selectedCategoryIds,
+      is_free: isFree,
+      price_toman: price,
     };
 
     try {
@@ -344,6 +362,58 @@ export const Books: React.FC = () => {
               />
             </div>
 
+            {/* Pricing */}
+            <div className="md:col-span-2 bg-slate-50/70 border border-slate-100 rounded-2xl p-5 space-y-4">
+              <label className="block text-xs font-bold text-slate-500">دسترسی و قیمت</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFree(true)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
+                    isFree
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/20'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Unlock className="h-3.5 w-3.5" /> رایگان
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFree(false)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
+                    !isFree
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Lock className="h-3.5 w-3.5" /> پولی
+                </button>
+              </div>
+
+              {!isFree && (
+                <div className="animate-[fadeIn_0.2s_ease-out]">
+                  <label className="block text-xs font-bold text-slate-500 mb-2">قیمت کتاب (تومان)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={priceToman}
+                    onChange={(e) => setPriceToman(e.target.value)}
+                    placeholder="مثال: 250000"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 transition"
+                  />
+                  {priceToman !== '' && Number.isFinite(Number(priceToman)) && (
+                    <p className="text-xs text-indigo-600 font-bold mt-2">
+                      {formatToman(Number(priceToman))}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    کاربران دارای اشتراک فعال بدون پرداخت این مبلغ به کتاب دسترسی دارند. برای رایگان
+                    کردن تعدادی از فصل‌ها، به صفحه جزئیات کتاب بروید.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="md:col-span-2 flex justify-end gap-3 border-t border-slate-50 pt-4">
               <button
                 type="button"
@@ -381,6 +451,7 @@ export const Books: React.FC = () => {
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">کتاب و جلد</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">نویسنده</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">دسته‌بندی‌ها</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">قیمت</th>
                   <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">عملیات</th>
                 </tr>
               </thead>
@@ -424,6 +495,17 @@ export const Books: React.FC = () => {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {book.is_free ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
+                          <Unlock className="h-3 w-3" /> رایگان
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
+                          <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-left space-x-2 space-x-reverse">
                       <Link

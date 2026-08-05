@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { recordActivity, getStats, XP } from '../services/gamification';
+import { DAY_MS, tehranDayKey, tehranDayStart } from '../utils/datetime';
 
 const router = Router();
 
@@ -204,7 +205,9 @@ router.get('/stats', async (req: UserAuthRequest, res) => {
     const stats = await getStats(userId);
 
     // Recent activity days for rendering a heatmap / calendar.
-    const since = new Date(Date.now() - 84 * 24 * 60 * 60 * 1000); // ~12 weeks
+    // Pinned to a Tehran day boundary so the oldest visible column doesn't drift
+    // in and out depending on the hour the request is made.
+    const since = tehranDayStart(new Date(Date.now() - 83 * DAY_MS)); // 12 weeks
     const activity = await prisma.dailyActivity.findMany({
       where: { user_id: userId, date: { gte: since } },
       orderBy: { date: 'asc' },
@@ -214,7 +217,7 @@ router.get('/stats', async (req: UserAuthRequest, res) => {
     res.json({
       ...stats,
       activity: activity.map((a) => ({
-        date: a.date.toISOString().slice(0, 10),
+        date: tehranDayKey(a.date),
         xpEarned: a.xp_earned,
       })),
     });

@@ -11,17 +11,19 @@ datasource db {
 }
 
 model User {
-  id               Int               @id @default(autoincrement())
-  phone            String            @unique
+  id               Int                @id @default(autoincrement())
+  phone            String             @unique
   first_name       String
   last_name        String
-  created_at       DateTime          @default(now())
-  updated_at       DateTime          @updatedAt
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
   reading_progress ReadingProgress[]
   stats            UserStats?
   daily_activity   DailyActivity[]
   quiz_attempts    QuizAttempt[]
   bookmarks        Bookmark[]
+  subscriptions    UserSubscription[]
+  book_purchases   BookPurchase[]
 }
 
 model Category {
@@ -30,15 +32,21 @@ model Category {
   books Book[]
 }
 
+// `is_free` is the authoritative flag for whether a book is readable without
+// paying — `price_toman` is only meaningful when it is false. Keeping the two
+// separate lets an admin park a price on a book while temporarily opening it up.
 model Book {
-  id                Int        @id @default(autoincrement())
+  id                Int            @id @default(autoincrement())
   title             String
   author            String
   short_description String
   full_description  String
   cover_image_url   String?
+  is_free           Boolean        @default(true)
+  price_toman       Int            @default(0)
   categories        Category[]
   chapters          Chapter[]
+  purchases         BookPurchase[]
 }
 
 model Chapter {
@@ -47,6 +55,8 @@ model Chapter {
   book             Book              @relation(fields: [book_id], references: [id], onDelete: Cascade)
   title            String
   chapter_order    Int
+  // Free preview inside a paid book. Ignored when the book itself is free.
+  is_free          Boolean           @default(false)
   pages            Page[]
   reading_progress ReadingProgress[]
   quiz             Quiz?
@@ -182,4 +192,52 @@ model QuizAnswer {
   is_correct     Boolean
 
   @@index([attempt_id])
+}
+
+// An admin-defined subscription offer, e.g. "3 months for 500,000 tomans".
+// `duration_months` is free-form so an admin can create any period they like.
+// Plans are soft-retired via `is_active` rather than deleted, so subscriptions
+// sold under an old plan keep pointing at something meaningful.
+model SubscriptionPlan {
+  id              Int                @id @default(autoincrement())
+  title           String
+  duration_months Int
+  price_toman     Int
+  is_active       Boolean            @default(true)
+  created_at      DateTime           @default(now())
+  updated_at      DateTime           @updatedAt
+  subscriptions   UserSubscription[]
+}
+
+// A granted subscription window. A user is "subscribed" when they have any row
+// whose `expires_at` is still in the future; overlapping rows simply extend
+// coverage. `plan_id` is nullable so retiring a plan never orphans a grant.
+model UserSubscription {
+  id         Int               @id @default(autoincrement())
+  user_id    Int
+  user       User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  plan_id    Int?
+  plan       SubscriptionPlan? @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  starts_at  DateTime          @default(now())
+  expires_at DateTime
+  created_at DateTime          @default(now())
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+// A one-off purchase granting permanent access to a single book. `price_toman`
+// records what the book cost at purchase time, so later price changes don't
+// rewrite history.
+model BookPurchase {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  book_id     Int
+  book        Book     @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  price_toman Int      @default(0)
+  created_at  DateTime @default(now())
+
+  @@unique([user_id, book_id])
+  @@index([user_id])
 }
