@@ -218,3 +218,37 @@ export async function verifyPayment(trackId: string): Promise<ZibalVerifyResult>
 export async function inquiryPayment(trackId: string): Promise<ZibalInquiryResult> {
   return post<ZibalInquiryResult>('/v1/inquiry', { trackId: Number(trackId) });
 }
+
+// Public IP echo services, tried in order. More than one because any single
+// service may be unreachable from an Iranian host.
+const IP_ECHO_URLS = ['https://api.ipify.org', 'https://icanhazip.com', 'https://ifconfig.me/ip'];
+const IP_ECHO_TIMEOUT_MS = 5000;
+
+/**
+ * The public IP this server's *outbound* requests appear to come from — which
+ * is the address Zibal checks against the gateway's IP allowlist (result 115).
+ *
+ * This is frequently NOT the IP that the API's own domain resolves to: inbound
+ * traffic arrives at a load balancer, while outbound traffic leaves through the
+ * platform's NAT gateway. Registering the wrong one of the two is the usual
+ * cause of a 115 on a deploy that is otherwise configured correctly.
+ *
+ * Returns null when no echo service could be reached.
+ */
+export async function egressIp(): Promise<string | null> {
+  for (const url of IP_ECHO_URLS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), IP_ECHO_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) continue;
+      const ip = (await response.text()).trim();
+      if (ip) return ip;
+    } catch {
+      // Try the next one.
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return null;
+}

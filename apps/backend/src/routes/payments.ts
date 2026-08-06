@@ -12,6 +12,8 @@ import {
 } from '../services/payments';
 import {
   ZibalError,
+  callbackUrl,
+  egressIp,
   paymentPageUrl,
   requestPayment,
   zibalConfigured,
@@ -326,11 +328,17 @@ router.get('/', requireUser, async (req: UserAuthRequest, res) => {
 
 // OPS: GET /api/payments/config/check — is the gateway wired up on this deploy?
 // Deliberately does not expose the merchant id itself.
-router.get('/config/check', (_req, res) => {
+//
+// `egressIp` is the address Zibal's IP allowlist actually sees; it is what must
+// be registered in the panel to clear a result-115 rejection. It is usually not
+// the IP this API's domain resolves to — see the note on `egressIp()`.
+router.get('/config/check', async (_req, res) => {
   res.json({
     configured: zibalConfigured(),
     merchantSuffix: zibalMerchant().slice(-4),
-    publicBaseUrl: Boolean(process.env.PUBLIC_BASE_URL),
+    publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
+    callbackUrl: process.env.PUBLIC_BASE_URL ? callbackUrl() : null,
+    egressIp: await egressIp(),
   });
 });
 
