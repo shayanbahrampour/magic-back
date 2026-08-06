@@ -30,6 +30,13 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
   const paramName = process.env.SMSIR_CODE_PARAM || 'CODE';
 
   if (!apiKey || !Number.isFinite(templateId)) {
+    // In production a missing key is a broken deploy, not a dev convenience:
+    // logging the code and reporting success would leave sign-in silently dead
+    // with a "code sent" message and no SMS. Fail loudly instead.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[SMS] SMSIR_API_KEY / SMSIR_TEMPLATE_ID are not set — cannot send OTP');
+      throw new SmsError('سرویس پیامک پیکربندی نشده است. لطفاً با پشتیبانی تماس بگیرید.');
+    }
     console.log(`[SMS] not configured — OTP for ${phone} is ${code}`);
     return;
   }
