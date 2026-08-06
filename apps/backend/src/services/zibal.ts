@@ -219,10 +219,86 @@ export async function inquiryPayment(trackId: string): Promise<ZibalInquiryResul
   return post<ZibalInquiryResult>('/v1/inquiry', { trackId: Number(trackId) });
 }
 
-// Public IP echo services, tried in order. More than one because any single
-// service may be unreachable from an Iranian host.
-const IP_ECHO_URLS = ['https://api.ipify.org', 'https://icanhazip.com', 'https://ifconfig.me/ip'];
+// Public IP echo services, tried in order. Domestic first: a foreign endpoint
+// is often unreachable from Iranian hosting, and when it *is* reachable it may
+// be answering through a proxy — reporting an IP that is not the one Zibal
+// sees. Override with IP_ECHO_URLS (comma-separated) to point at whatever is
+// actually reachable from your host.
+const DEFAULT_IP_ECHO_URLS = [
+  'https://ipnumberia.com/',
+  'https://api.ipify.org',
+  'https://icanhazip.com',
+  'https://ifconfig.me/ip',
+];
 const IP_ECHO_TIMEOUT_MS = 5000;
+
+const IPV4_PATTERN = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+
+// Keys these services commonly wrap the address in, when they answer with JSON.
+const IP_JSON_KEYS = ['ip', 'IP', 'ipAddress', 'ip_address', 'address', 'query', 'clientIp'];
+
+function ipEchoUrls(): string[] {
+  const configured = process.env.IP_ECHO_URLS?.trim();
+  if (!configured) return DEFAULT_IP_ECHO_URLS;
+  return configured.split(',').map((u) => u.trim()).filter(Boolean);
+}
+
+/**
+ * True for a syntactically valid IPv4 that is also *routable*. Private, loopback
+ * and reserved ranges are rejected so that scanning an HTML page cannot mistake
+ * a documentation example or an internal address for the real egress IP.
+ */
+function isPublicIpv4(value: string): boolean {
+  const parts = value.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
+    return false;
+  }
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return false; // this-network, private, loopback, multicast/reserved
+  if (a === 169 && b === 254) return false; // link-local
+  if (a === 172 && b >= 16 && b <= 31) return false; // private
+  if (a === 192 && b === 168) return false; // private
+  if (a === 100 && b >= 64 && b <= 127) return false; // carrier-grade NAT
+  if (a === 198 && (b === 18 || b === 19)) return false; // benchmarking
+  return true;
+}
+
+/**
+ * Pulls an address out of whatever the echo service answered with — a bare
+ * string, a JSON object, or a full HTML page. Written this way because these
+ * services are not contract-stable and several are undocumented.
+ */
+function extractIp(body: string): string | null {
+  const trimmed = body.trim();
+
+  // 1. A bare address, which is what most plain-text echo services return.
+  if (isPublicIpv4(trimmed)) return trimmed;
+
+  // 2. JSON, under whichever key this service happens to use.
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object') {
+      for (const key of IP_JSON_KEYS) {
+        const value = (parsed as Record<string, unknown>)[key];
+        if (typeof value === 'string' && isPublicIpv4(value.trim())) return value.trim();
+      }
+    }
+  } catch {
+    // Not JSON; fall through to scanning.
+  }
+
+  // 3. Last resort: the first routable address appearing in an HTML page.
+  for (const match of trimmed.match(IPV4_PATTERN) ?? []) {
+    if (isPublicIpv4(match)) return match;
+  }
+  return null;
+}
+
+export type EgressIpResult = {
+  ip: string | null;
+  /** Which echo service answered — check this before trusting the value. */
+  source: string | null;
+};
 
 /**
  * The public IP this server's *outbound* requests appear to come from — which
@@ -233,22 +309,24 @@ const IP_ECHO_TIMEOUT_MS = 5000;
  * platform's NAT gateway. Registering the wrong one of the two is the usual
  * cause of a 115 on a deploy that is otherwise configured correctly.
  *
- * Returns null when no echo service could be reached.
+ * `source` is reported alongside the address deliberately: this is a diagnostic
+ * whose answer gets pasted into a payment provider's allowlist, so it should be
+ * obvious which third party produced it.
  */
-export async function egressIp(): Promise<string | null> {
-  for (const url of IP_ECHO_URLS) {
+export async function egressIp(): Promise<EgressIpResult> {
+  for (const url of ipEchoUrls()) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), IP_ECHO_TIMEOUT_MS);
     try {
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) continue;
-      const ip = (await response.text()).trim();
-      if (ip) return ip;
+      const ip = extractIp(await response.text());
+      if (ip) return { ip, source: url };
     } catch {
       // Try the next one.
     } finally {
       clearTimeout(timer);
     }
   }
-  return null;
+  return { ip: null, source: null };
 }

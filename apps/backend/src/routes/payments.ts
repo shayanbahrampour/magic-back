@@ -333,12 +333,14 @@ router.get('/', requireUser, async (req: UserAuthRequest, res) => {
 // be registered in the panel to clear a result-115 rejection. It is usually not
 // the IP this API's domain resolves to — see the note on `egressIp()`.
 router.get('/config/check', async (_req, res) => {
+  const egress = await egressIp();
   res.json({
     configured: zibalConfigured(),
     merchantSuffix: zibalMerchant().slice(-4),
     publicBaseUrl: process.env.PUBLIC_BASE_URL || null,
     callbackUrl: process.env.PUBLIC_BASE_URL ? callbackUrl() : null,
-    egressIp: await egressIp(),
+    egressIp: egress.ip,
+    egressIpSource: egress.source,
   });
 });
 
