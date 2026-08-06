@@ -29,6 +29,24 @@ model User {
   book_purchases   BookPurchase[]
 }
 
+// A one-time code sent by SMS. Codes are stored hashed (never in the clear),
+// expire quickly, and are consumed on first successful use. `purpose` keeps the
+// app's sign-in codes and the admin dashboard's codes in separate namespaces so
+// one can never be replayed against the other.
+model OtpCode {
+  id          Int       @id @default(autoincrement())
+  phone       String
+  purpose     String
+  code_hash   String
+  expires_at  DateTime
+  attempts    Int       @default(0)
+  consumed_at DateTime?
+  created_at  DateTime  @default(now())
+
+  @@index([phone, purpose])
+  @@index([expires_at])
+}
+
 model Category {
   id    Int    @id @default(autoincrement())
   name  String

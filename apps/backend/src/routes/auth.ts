@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { signToken } from '../utils/jwt';
+import { discardLatestOtp, issueOtp, verifyOtp } from '../services/otp';
+import { SmsError, sendOtpSms } from '../services/sms';
 
 const router = Router();
 
@@ -29,8 +31,20 @@ router.post('/send-otp', async (req, res) => {
     });
   }
 
-  // For now, OTP is hardcoded to 11111
-  console.log(`[AUTH] OTP requested for ${cleanPhone}. Hardcoded OTP: 11111`);
+  const issued = await issueOtp(cleanPhone, 'ADMIN');
+  if (!issued.ok) {
+    return res.status(429).json({ error: issued.error, retryAfterSeconds: issued.retryAfterSeconds });
+  }
+
+  try {
+    await sendOtpSms(cleanPhone, issued.code);
+  } catch (error) {
+    // Undelivered code — drop it so the admin can retry without a cooldown.
+    await discardLatestOtp(cleanPhone, 'ADMIN');
+    return res.status(502).json({
+      error: error instanceof SmsError ? error.message : 'ارسال پیامک انجام نشد. لطفاً دوباره تلاش کنید.',
+    });
+  }
 
   res.json({
     message: 'کد تایید ۵ رقمی به شماره شما ارسال شد.',
@@ -58,11 +72,9 @@ router.post('/verify-otp', async (req, res) => {
 
   const cleanOtp = typeof otp === 'string' ? otp.trim() : String(otp || '').trim();
 
-  // Hardcoded check: 11111
-  if (cleanOtp !== '11111') {
-    return res.status(401).json({
-      error: 'کد تایید وارد شده اشتباه است (برای تست از 11111 استفاده کنید).',
-    });
+  const check = await verifyOtp(cleanPhone, 'ADMIN', cleanOtp);
+  if (!check.ok) {
+    return res.status(401).json({ error: check.error });
   }
 
   const token = signToken({

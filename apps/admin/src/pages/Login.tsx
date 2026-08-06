@@ -132,9 +132,7 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
               <p className="text-sm text-indigo-300 font-medium">
                 کد تایید به شماره <span className="font-mono font-bold text-white" dir="ltr">{phone}</span> ارسال شد.
               </p>
-              <div className="mt-2 inline-block px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold">
-                کد تایید تستی: <span className="font-mono text-sm">11111</span>
-              </div>
+              <p className="mt-1 text-xs text-slate-400">کد تا ۲ دقیقه معتبر است.</p>
               <button
                 type="button"
                 onClick={() => setStep('PHONE')}

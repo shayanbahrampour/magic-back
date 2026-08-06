@@ -5,6 +5,8 @@ import { signToken, verifyToken } from '../utils/jwt';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { normalizeFileUrl } from '../utils/s3';
 import { describeUploadError, storeFile } from '../utils/storage';
+import { discardLatestOtp, issueOtp, verifyOtp } from '../services/otp';
+import { SmsError, sendOtpSms } from '../services/sms';
 
 const router = Router();
 
@@ -19,9 +21,6 @@ const avatarUpload = multer({
 });
 
 const IRAN_PHONE_REGEX = /^09\d{9}$/;
-
-// For now the OTP is hardcoded. Replace with a real SMS provider + stored codes later.
-const HARDCODED_OTP = '11111';
 
 function normalizePhone(input: unknown): string | null {
   if (typeof input !== 'string') return null;
@@ -66,7 +65,21 @@ router.post('/send-otp', async (req, res) => {
     });
   }
 
-  console.log(`[USER-AUTH] OTP requested for ${phone}. Hardcoded OTP: ${HARDCODED_OTP}`);
+  const issued = await issueOtp(phone, 'USER');
+  if (!issued.ok) {
+    return res.status(429).json({ error: issued.error, retryAfterSeconds: issued.retryAfterSeconds });
+  }
+
+  try {
+    await sendOtpSms(phone, issued.code);
+  } catch (error) {
+    // The code was never delivered — drop it so the user can retry immediately
+    // instead of waiting out the resend cooldown.
+    await discardLatestOtp(phone, 'USER');
+    return res.status(502).json({
+      error: error instanceof SmsError ? error.message : 'ارسال پیامک انجام نشد. لطفاً دوباره تلاش کنید.',
+    });
+  }
 
   res.json({
     message: 'کد تایید ۵ رقمی به شماره شما ارسال شد.',
@@ -84,10 +97,9 @@ router.post('/verify-otp', async (req, res) => {
   }
 
   const otp = typeof req.body?.otp === 'string' ? req.body.otp.trim() : String(req.body?.otp ?? '').trim();
-  if (otp !== HARDCODED_OTP) {
-    return res.status(401).json({
-      error: 'کد تایید وارد شده اشتباه است (برای تست از 11111 استفاده کنید).',
-    });
+  const check = await verifyOtp(phone, 'USER', otp);
+  if (!check.ok) {
+    return res.status(401).json({ error: check.error });
   }
 
   try {
