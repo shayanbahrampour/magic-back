@@ -14,6 +14,18 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 export class SmsError extends Error {}
 
+/**
+ * Converts a stored `09xxxxxxxxx` number to the national format sms.ir's panel
+ * documents — no leading zero, no country code. (The API in practice accepts
+ * `09…`, `9…` and `98…` alike; this just sends the canonical one.)
+ */
+export function toProviderMobile(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('98')) return digits.slice(2);
+  if (digits.startsWith('0')) return digits.slice(1);
+  return digits;
+}
+
 /** True when real sending is configured; false means dev/log mode. */
 export function smsConfigured(): boolean {
   return Boolean(process.env.SMSIR_API_KEY && process.env.SMSIR_TEMPLATE_ID);
@@ -53,7 +65,7 @@ export async function sendOtpSms(phone: string, code: string): Promise<void> {
         'X-API-KEY': apiKey,
       },
       body: JSON.stringify({
-        mobile: phone,
+        mobile: toProviderMobile(phone),
         templateId,
         parameters: [{ name: paramName, value: code }],
       }),
