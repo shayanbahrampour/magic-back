@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "admin",
+      "runtimeExecutable": "/Users/shawbahrampour/.nvm/versions/node/v22.22.3/bin/node",
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js",
+        "apps/admin",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
+    }
+  ]
+}

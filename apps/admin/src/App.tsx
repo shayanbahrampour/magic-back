@@ -7,6 +7,7 @@ import { Books } from './pages/Books';
 import { BookDetail } from './pages/BookDetail';
 import { ChapterDetail } from './pages/ChapterDetail';
 import { Subscriptions } from './pages/Subscriptions';
+import { Users } from './pages/Users';
 import { Login } from './pages/Login';
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
           <Route path="/books" element={<Books />} />
           <Route path="/books/:id" element={<BookDetail />} />
           <Route path="/books/:bookId/chapters/:chapterId" element={<ChapterDetail />} />
+          <Route path="/users" element={<Users />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
         </Routes>
       </Layout>

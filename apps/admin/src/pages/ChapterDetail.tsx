@@ -2,20 +2,34 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Book, Chapter, Page } from '../services/api';
-import { 
-  ArrowRight, 
-  FileText, 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  X, 
-  Image as ImageIcon, 
-  Eye, 
-  AlertCircle,
+import {
+  ArrowRight,
+  FileText,
+  Plus,
+  Trash2,
+  Edit2,
+  Image as ImageIcon,
+  Eye,
   Upload,
-  Loader2
+  Loader2,
+  Maximize2,
+  X,
 } from 'lucide-react';
 import { RichTextEditor, RichTextDisplay } from '../components/RichTextEditor';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Notice,
+  Panel,
+  PanelHeader,
+  Skeleton,
+  SkeletonRows,
+} from '../components/ui';
 
 export const ChapterDetail: React.FC = () => {
   const { bookId, chapterId } = useParams<{ bookId: string; chapterId: string }>();
@@ -36,6 +50,7 @@ export const ChapterDetail: React.FC = () => {
   const [currentImageUrl, setCurrentImageUrl] = useState('');
   const [isFullPage, setIsFullPage] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -51,11 +66,10 @@ export const ChapterDetail: React.FC = () => {
       setBook(bookData);
       setChapter(chapterData);
       setPages(pagesData);
-      
+
       // Auto-suggest next page number
-      const nextPage = pagesData.length > 0 
-        ? Math.max(...pagesData.map(p => p.page_number)) + 1 
-        : 1;
+      const nextPage =
+        pagesData.length > 0 ? Math.max(...pagesData.map((p) => p.page_number)) + 1 : 1;
       setPageNumber(nextPage.toString());
     } catch (err: any) {
       setError(err.message || 'خطا در بارگذاری اطلاعات صفحات');
@@ -68,11 +82,11 @@ export const ChapterDetail: React.FC = () => {
     loadData();
   }, [bId, cId]);
 
-  const handleAddImageUrl = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!currentImageUrl.trim()) return;
-    if (!imageUrls.includes(currentImageUrl.trim())) {
-      setImageUrls([...imageUrls, currentImageUrl.trim()]);
+  const handleAddImageUrl = () => {
+    const url = currentImageUrl.trim();
+    if (!url) return;
+    if (!imageUrls.includes(url)) {
+      setImageUrls([...imageUrls, url]);
     }
     setCurrentImageUrl('');
   };
@@ -87,9 +101,11 @@ export const ChapterDetail: React.FC = () => {
       const res = await api.uploadFiles(Array.from(files));
       // res.urls contains all uploaded urls
       const newUrls = res.urls ? res.urls : [res.url];
-      const combined = [...imageUrls, ...newUrls].filter((item, index, self) => self.indexOf(item) === index);
+      const combined = [...imageUrls, ...newUrls].filter(
+        (item, index, self) => self.indexOf(item) === index,
+      );
       setImageUrls(combined);
-      setSuccess(`${newUrls.length} تصویر با موفقیت در MinIO / S3 آپلود شد`);
+      setSuccess(`${newUrls.length} تصویر آپلود شد`);
     } catch (err: any) {
       setError(err.message || 'خطا در آپلود تصاویر به سرور');
     } finally {
@@ -99,7 +115,7 @@ export const ChapterDetail: React.FC = () => {
   };
 
   const handleRemoveImageUrl = (urlToRemove: string) => {
-    setImageUrls(imageUrls.filter(url => url !== urlToRemove));
+    setImageUrls(imageUrls.filter((url) => url !== urlToRemove));
   };
 
   const handleEditClick = (page: Page) => {
@@ -121,9 +137,7 @@ export const ChapterDetail: React.FC = () => {
     setIsFullPage(false);
     setUploadingImages(false);
     setError('');
-    const nextPage = pages.length > 0 
-      ? Math.max(...pages.map(p => p.page_number)) + 1 
-      : 1;
+    const nextPage = pages.length > 0 ? Math.max(...pages.map((p) => p.page_number)) + 1 : 1;
     setPageNumber(nextPage.toString());
   };
 
@@ -145,18 +159,21 @@ export const ChapterDetail: React.FC = () => {
       is_full_page: isFullPage,
     };
 
+    setSaving(true);
     try {
       if (editingPage) {
         await api.updatePage(editingPage.id, payload);
-        setSuccess('صفحه با موفقیت به‌روزرسانی شد');
+        setSuccess('صفحه به‌روزرسانی شد');
       } else {
         await api.createPage(payload);
-        setSuccess('صفحه جدید با موفقیت اضافه شد');
+        setSuccess('صفحه جدید اضافه شد');
       }
       handleCancel();
       await loadData();
     } catch (err: any) {
       setError(err.message || 'خطا در ذخیره‌سازی صفحه');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -168,7 +185,7 @@ export const ChapterDetail: React.FC = () => {
     setSuccess('');
     try {
       await api.deletePage(pageId);
-      setSuccess('صفحه با موفقیت حذف شد');
+      setSuccess('صفحه حذف شد');
       await loadData();
     } catch (err: any) {
       setError(err.message || 'خطا در حذف صفحه');
@@ -177,115 +194,98 @@ export const ChapterDetail: React.FC = () => {
 
   if (loading && !chapter) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="space-y-6">
+        <Skeleton className="h-4 w-40" />
+        <Panel className="p-5">
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="mt-3 h-4 w-32" />
+        </Panel>
+        <Panel className="overflow-hidden">
+          <SkeletonRows rows={3} />
+        </Panel>
       </div>
     );
   }
 
   if (!book || !chapter) {
-    return (
-      <div className="bg-red-50 text-red-700 p-6 rounded-2xl border border-red-100">
-        اطلاعات کتاب یا فصل مورد نظر یافت نشد.
-      </div>
-    );
+    return <Notice tone="critical">اطلاعات کتاب یا فصل مورد نظر یافت نشد.</Notice>;
   }
 
   return (
-    <div className="space-y-6 text-right">
-      {/* Back link */}
-      <Link to={`/books/${bId}`} className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800 transition">
-        <ArrowRight className="h-4 w-4" /> بازگشت به فصل‌های کتاب
+    <div className="space-y-6">
+      <Link
+        to={`/books/${bId}`}
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted transition-colors duration-150 hover:text-ink"
+      >
+        <ArrowRight className="h-4 w-4" />
+        فصل‌های «{book.title}»
       </Link>
 
-      {/* Title Header Card */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-purple-50 text-purple-600 p-3 rounded-2xl shrink-0">
-            <FileText className="h-6 w-6" />
-          </div>
-          <div>
-            <span className="text-xs text-indigo-600 font-bold uppercase tracking-wider block">
-              {book.title}
-            </span>
-            <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">
-              {chapter.title}
-            </h2>
-          </div>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-muted">
+            فصل <span className="num">{chapter.chapter_order}</span>
+          </p>
+          <h2 className="text-2xl font-bold tracking-tight text-ink">{chapter.title}</h2>
+          <p className="mt-1 text-sm text-muted">
+            <span className="num">{pages.length}</span> صفحه ثبت شده
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full border border-slate-200/50">
-            شماره ترتیب فصل: {chapter.chapter_order}
-          </span>
-          {!showForm && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition duration-150 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" /> افزودن صفحه جدید
-            </button>
-          )}
-        </div>
+        {!showForm && (
+          <Button variant="primary" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" />
+            صفحه جدید
+          </Button>
+        )}
       </div>
 
-      {/* Notifications */}
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100 text-sm font-medium">
+        <Notice tone="critical" onDismiss={() => setError('')}>
           {error}
-        </div>
+        </Notice>
       )}
       {success && (
-        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl border border-emerald-100 text-sm font-medium">
+        <Notice tone="positive" onDismiss={() => setSuccess('')}>
           {success}
-        </div>
+        </Notice>
       )}
 
-      {/* Create / Edit Page Form */}
       {showForm && (
-        <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-md space-y-6 animate-[fadeIn_0.2s_ease-out]">
-          <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-            <h3 className="text-lg font-bold text-slate-800">
-              {editingPage ? `ویرایش صفحه شماره ${editingPage.page_number}` : 'افزودن صفحه جدید به این فصل'}
-            </h3>
-            <button onClick={handleCancel} className="text-slate-400 hover:text-slate-600">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+        <Panel className="animate-rise overflow-hidden">
+          <PanelHeader
+            title={editingPage ? `ویرایش صفحه ${editingPage.page_number}` : 'صفحه جدید'}
+            onClose={handleCancel}
+          />
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Page Number */}
-              <div className="md:col-span-1">
-                <label className="block text-xs font-bold text-slate-500 mb-2">
-                  شماره صفحه
-                </label>
-                <input
-                  type="number"
-                  value={pageNumber}
-                  onChange={(e) => setPageNumber(e.target.value)}
-                  placeholder="مثال: 1"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
-                />
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-6 p-5">
+            <Field label="شماره صفحه" htmlFor="page-number" className="max-w-[8rem]">
+              <Input
+                id="page-number"
+                type="number"
+                dir="ltr"
+                className="num"
+                value={pageNumber}
+                onChange={(e) => setPageNumber(e.target.value)}
+              />
+            </Field>
 
-              {/* Image Upload & URL Section */}
-              <div className="md:col-span-3 space-y-3">
-                <label className="block text-xs font-bold text-slate-500">
-                  تصاویر صفحه (آپلود مستقیم در MinIO / S3 یا افزودن دستی لینک)
-                </label>
-                
-                {/* Upload Button Zone */}
-                <div className="flex flex-wrap items-center gap-3 p-3 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
-                  <label className="cursor-pointer px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-2 shrink-0">
+            {/* Illustrations */}
+            <Field
+              label="تصاویر صفحه"
+              hint="فایل‌ها در فضای ذخیره‌سازی S3 آپلود می‌شوند. آدرس تصویر خارجی را هم می‌توانید دستی اضافه کنید."
+            >
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-control border border-line bg-surface px-3.5 text-sm font-semibold text-ink transition-colors duration-150 ease-out-quart hover:bg-raised">
                     {uploadingImages ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>در حال آپلود در MinIO / S3...</span>
+                        در حال آپلود…
                       </>
                     ) : (
                       <>
                         <Upload className="h-4 w-4" />
-                        <span>انتخاب و آپلود تصاویر (تکی یا گروهی)</span>
+                        آپلود تصویر
                       </>
                     )}
                     <input
@@ -297,219 +297,185 @@ export const ChapterDetail: React.FC = () => {
                       className="hidden"
                     />
                   </label>
-                  <span className="text-xs text-slate-500">
-                    یا می‌توانید آدرس تصویر را به‌صورت دستی در کادر زیر وارد کنید:
-                  </span>
-                </div>
 
-                {/* Manual Link Input */}
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={currentImageUrl}
-                    onChange={(e) => setCurrentImageUrl(e.target.value)}
-                    placeholder="لینک تصویر خارجی، مثلا: https://example.com/image.jpg"
-                    className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
-                    dir="ltr"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddImageUrl}
-                    className="px-4 py-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition shrink-0"
-                  >
-                    افزودن لینک
-                  </button>
-                </div>
-
-                {/* Checkbox for Full Page Image option */}
-                <div className="pt-2">
-                  <label className="inline-flex items-center gap-3 p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl cursor-pointer hover:bg-indigo-100/60 transition select-none w-full">
-                    <input
-                      type="checkbox"
-                      checked={isFullPage}
-                      onChange={(e) => setIsFullPage(e.target.checked)}
-                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer shrink-0"
+                  <div className="flex min-w-[16rem] flex-1 gap-2">
+                    <Input
+                      type="url"
+                      dir="ltr"
+                      value={currentImageUrl}
+                      onChange={(e) => setCurrentImageUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddImageUrl();
+                        }
+                      }}
+                      placeholder="https://example.com/image.jpg"
+                      className="num text-xs"
                     />
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-extrabold text-indigo-900">
-                        نمایش تصویر به‌صورت تمام‌صفحه (Full Page Image)
-                      </span>
-                      <span className="text-[11px] text-slate-600">
-                        با انتخاب این گزینه، تصویر صفحه در اپلیکیشن کلاینت به‌صورت تمام‌صفحه (Full Screen / Full Page) نمایش داده خواهد شد.
-                      </span>
-                    </div>
-                  </label>
+                    <Button type="button" onClick={handleAddImageUrl}>
+                      افزودن
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* List of Image URL Cards/Badges */}
-            {imageUrls.length > 0 && (
-              <div className="space-y-3 p-4 bg-slate-50/70 border border-slate-200 rounded-2xl">
-                <span className="block text-xs font-bold text-slate-600">
-                  تصاویر متصل‌شده به این صفحه ({imageUrls.length}) - برای حذف روی ضربدر کلیک کنید:
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {imageUrls.map((url, idx) => (
-                    <div 
-                      key={idx} 
-                      className="relative group bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col"
-                    >
-                      <div className="h-28 bg-slate-100 overflow-hidden relative">
+                {imageUrls.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {imageUrls.map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="group relative overflow-hidden rounded-control border border-line bg-raised"
+                      >
                         <img
                           src={url}
-                          alt={`Preview ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          alt={`تصویر ${idx + 1}`}
+                          className="h-24 w-full object-cover"
                         />
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={() => handleRemoveImageUrl(url)}
-                          className="absolute top-1.5 right-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-full p-1.5 shadow transition"
+                          aria-label="حذف این تصویر"
                           title="حذف این تصویر"
+                          className="absolute top-1.5 end-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-line bg-surface/95 text-critical opacity-0 transition-opacity duration-150 ease-out-quart group-hover:opacity-100 focus-visible:opacity-100"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
+                        <p
+                          className="num truncate border-t border-line bg-surface px-2 py-1 text-[0.625rem] text-faint"
+                          dir="ltr"
+                        >
+                          {url}
+                        </p>
                       </div>
-                      <div className="p-2 text-[10px] font-mono text-slate-500 truncate bg-white" dir="ltr">
-                        {url}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                )}
+
+                <div className="rounded-control border border-line bg-raised/50 p-3.5">
+                  <Checkbox
+                    checked={isFullPage}
+                    onChange={setIsFullPage}
+                    label="نمایش تمام‌صفحه"
+                    hint="تصویر این صفحه در اپلیکیشن کلاینت تمام عرض و ارتفاع صفحه را می‌گیرد."
+                  />
                 </div>
               </div>
-            )}
+            </Field>
 
-            {/* Text Content */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                متن داستان
-              </label>
+            <Field label="متن داستان">
               <RichTextEditor
                 value={textContent}
                 onChange={setTextContent}
-                placeholder="متن داستان مربوط به این صفحه را بنویسید (با قابلیت بولد، ایتالیک، لیست و...)..."
+                placeholder="متن این صفحه را بنویسید…"
               />
-            </div>
+            </Field>
 
-            <div className="flex justify-end gap-3 border-t border-slate-50 pt-4">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-bold transition"
-              >
+            <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
+              <Button type="button" onClick={handleCancel}>
                 انصراف
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-150"
-              >
+              </Button>
+              <Button type="submit" variant="primary" loading={saving}>
                 {editingPage ? 'ذخیره تغییرات' : 'ثبت صفحه'}
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
       )}
 
-      {/* Pages list layout */}
-      <div className="space-y-4">
-        {pages.length === 0 ? (
-          <div className="bg-white border border-slate-100 rounded-3xl p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-            <AlertCircle className="h-8 w-8 text-slate-300 animate-bounce" />
-            <p>هنوز هیچ صفحه‌ای برای این فصل ثبت نشده است. روی «افزودن صفحه جدید» کلیک کنید.</p>
-          </div>
-        ) : (
-          pages.map((page) => (
-            <div 
-              key={page.id} 
-              className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow duration-200 space-y-4"
-            >
-              {/* Page Card Header */}
-              <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+      {pages.length === 0 ? (
+        <Panel>
+          <EmptyState
+            icon={FileText}
+            title="این فصل هنوز صفحه‌ای ندارد"
+            hint="هر صفحه می‌تواند متن، تصویر یا هر دو را داشته باشد."
+            action={
+              !showForm && (
+                <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+                  <Plus className="h-4 w-4" />
+                  صفحه جدید
+                </Button>
+              )
+            }
+          />
+        </Panel>
+      ) : (
+        <div className="space-y-4">
+          {pages.map((page) => (
+            <Panel key={page.id} className="overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-line-soft px-5 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="h-8 w-8 bg-indigo-50 text-indigo-600 font-bold rounded-xl flex items-center justify-center text-sm shadow-sm shrink-0">
+                  <span className="num flex h-8 w-8 items-center justify-center rounded-control border border-line bg-raised text-sm font-semibold text-muted">
                     {page.page_number}
                   </span>
-                  <span className="text-xs text-slate-400 font-bold">شناسه صفحه: {page.id}</span>
+                  <span className="num text-xs text-faint">#{page.id}</span>
                   {page.is_full_page && (
-                    <span className="px-3 py-1 bg-purple-100 text-purple-800 text-xs font-extrabold rounded-full border border-purple-200/80 shadow-sm flex items-center gap-1.5">
-                      <ImageIcon className="h-3 w-3" /> تصویر تمام‌صفحه (Full Page)
-                    </span>
+                    <Badge tone="accent">
+                      <Maximize2 className="h-3 w-3" /> تمام‌صفحه
+                    </Badge>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditClick(page)}
-                    className="inline-flex items-center justify-center p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                    title="ویرایش صفحه"
-                  >
+                <div className="flex items-center gap-1">
+                  <IconButton label="ویرایش صفحه" onClick={() => handleEditClick(page)}>
                     <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
+                  </IconButton>
+                  <IconButton
+                    label="حذف صفحه"
+                    tone="danger"
                     onClick={() => handleDelete(page.id)}
-                    className="inline-flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                    title="حذف صفحه"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
 
-              {/* Page Contents Details */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Text Content */}
-                <div className="lg:col-span-2 space-y-2">
-                  <span className="block text-xs font-bold text-slate-500">متن داستان</span>
+              <div className="grid gap-6 p-5 lg:grid-cols-3">
+                <div className="min-w-0 space-y-2 lg:col-span-2">
+                  <p className="text-xs font-semibold text-muted">متن</p>
                   {page.text_content ? (
                     <RichTextDisplay content={page.text_content} />
                   ) : (
-                    <p className="text-xs italic text-slate-400">بدون متن (این صفحه فقط حاوی تصویرسازی است).</p>
+                    <p className="text-xs text-faint">بدون متن — این صفحه فقط تصویر دارد.</p>
                   )}
                 </div>
 
-                {/* Illustrations Preview */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-                      <ImageIcon className="h-3.5 w-3.5 shrink-0" /> تصاویر متصل ({page.image_urls.length})
-                    </span>
-                    {page.is_full_page && (
-                      <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
-                        حالت تمام‌صفحه
-                      </span>
-                    )}
-                  </div>
+                  <p className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    تصاویر <span className="num">({page.image_urls.length})</span>
+                  </p>
                   {page.image_urls.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {page.image_urls.map((url, idx) => (
-                        <div key={idx} className="relative group/img rounded-xl overflow-hidden border border-slate-100 aspect-video bg-slate-50">
-                          <img 
-                            src={url} 
-                            alt={`تصویر شماره ${idx + 1}`}
-                            className="object-cover w-full h-full hover:scale-110 transition duration-300"
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="group relative block aspect-video overflow-hidden rounded-control border border-line bg-raised"
+                        >
+                          <img
+                            src={url}
+                            alt={`تصویر ${idx + 1}`}
+                            className="h-full w-full object-cover"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = 'none';
                             }}
                           />
-                          <a 
-                            href={url} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="absolute inset-0 bg-slate-900/50 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition duration-200 text-white"
-                          >
+                          <span className="absolute inset-0 flex items-center justify-center bg-ink/45 text-white opacity-0 transition-opacity duration-150 ease-out-quart group-hover:opacity-100">
                             <Eye className="h-4 w-4" />
-                          </a>
-                        </div>
+                          </span>
+                        </a>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs italic text-slate-400">بدون تصویر (این صفحه فقط حاوی متن است).</p>
+                    <p className="text-xs text-faint">بدون تصویر.</p>
                   )}
                 </div>
               </div>
-            </div>
-          ))
-        )}
-      </div>
+            </Panel>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

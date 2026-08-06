@@ -2,7 +2,42 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatToman, toPersianDigits } from '../services/api';
 import type { Book, Category } from '../services/api';
-import { Plus, Trash2, Edit2, ChevronLeft, X, BookOpen, RefreshCw, Upload, Loader2, Image as ImageIcon, Lock, Unlock, Sparkles } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  ChevronLeft,
+  X,
+  BookOpen,
+  RefreshCw,
+  Upload,
+  Loader2,
+  Image as ImageIcon,
+  Lock,
+  Unlock,
+  Award,
+} from 'lucide-react';
+import {
+  Badge,
+  Button,
+  Checkbox,
+  Chip,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Notice,
+  PageHeader,
+  Panel,
+  PanelHeader,
+  SegmentedControl,
+  SkeletonRows,
+  Table,
+  Td,
+  Textarea,
+  Th,
+  Tr,
+} from '../components/ui';
 
 export const Books: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -24,6 +59,7 @@ export const Books: React.FC = () => {
   // Points purchasing: the toggle mirrors "points_price > 0" on the server.
   const [pointsEnabled, setPointsEnabled] = useState(false);
   const [pointsPrice, setPointsPrice] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -31,10 +67,7 @@ export const Books: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [booksData, catsData] = await Promise.all([
-        api.getBooks(),
-        api.getCategories(),
-      ]);
+      const [booksData, catsData] = await Promise.all([api.getBooks(), api.getCategories()]);
       setBooks(booksData);
       setCategories(catsData);
     } catch (err: any) {
@@ -90,7 +123,7 @@ export const Books: React.FC = () => {
     try {
       const res = await api.uploadFile(file);
       setCoverImageUrl(res.url);
-      setSuccess('تصویر جلد با موفقیت آپلود شد');
+      setSuccess('تصویر جلد آپلود شد');
     } catch (err: any) {
       setError(err.message || 'خطا در آپلود تصویر جلد');
     } finally {
@@ -141,28 +174,35 @@ export const Books: React.FC = () => {
       points_price: points,
     };
 
+    setSaving(true);
     try {
       if (editingBook) {
         await api.updateBook(editingBook.id, payload);
-        setSuccess('اطلاعات کتاب با موفقیت به‌روزرسانی شد');
+        setSuccess('اطلاعات کتاب به‌روزرسانی شد');
       } else {
         await api.createBook(payload);
-        setSuccess('کتاب جدید با موفقیت به فهرست اضافه شد');
+        setSuccess('کتاب جدید به فهرست اضافه شد');
       }
       handleCancel();
       await loadData();
     } catch (err: any) {
       setError(err.message || 'خطا در ذخیره‌سازی کتاب');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('آیا از حذف این کتاب اطمینان دارید؟ با حذف کتاب، تمامی فصل‌ها و صفحات زیرمجموعه آن نیز برای همیشه حذف خواهند شد.')) {
+    if (
+      !window.confirm(
+        'آیا از حذف این کتاب اطمینان دارید؟ با حذف کتاب، تمامی فصل‌ها و صفحات زیرمجموعه آن نیز برای همیشه حذف خواهند شد.',
+      )
+    ) {
       return;
     }
     try {
       await api.deleteBook(id);
-      setSuccess('کتاب مورد نظر با موفقیت حذف شد');
+      setSuccess('کتاب حذف شد');
       await loadData();
     } catch (err: any) {
       setError(err.message || 'خطا در حذف کتاب');
@@ -171,303 +211,252 @@ export const Books: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-slate-800">فهرست کتاب‌ها و داستان‌ها</h2>
-          <p className="text-sm text-slate-400 mt-1">تمام کتاب‌ها، فصل‌ها و صفحات سیستم را مدیریت، ویرایش و دسته‌بندی کنید</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={loadData}
-            className="p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-500 hover:text-slate-700 transition"
-            title="بارگذاری مجدد"
-          >
-            <RefreshCw className="h-5 w-5" />
-          </button>
-          {!showForm && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition duration-150 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" /> افزودن کتاب جدید
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="کتاب‌ها"
+        description="هر کتاب از چند فصل و هر فصل از چند صفحه تشکیل می‌شود. برای ویرایش محتوا وارد جزئیات کتاب شوید."
+        actions={
+          <>
+            <IconButton label="بارگذاری مجدد" onClick={loadData} disabled={loading}>
+              <RefreshCw className="h-4 w-4" />
+            </IconButton>
+            {!showForm && (
+              <Button variant="primary" onClick={() => setShowForm(true)}>
+                <Plus className="h-4 w-4" />
+                کتاب جدید
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      {/* Notifications */}
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100 text-sm font-medium">
+        <Notice tone="critical" onDismiss={() => setError('')}>
           {error}
-        </div>
+        </Notice>
       )}
       {success && (
-        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl border border-emerald-100 text-sm font-medium">
+        <Notice tone="positive" onDismiss={() => setSuccess('')}>
           {success}
-        </div>
+        </Notice>
       )}
 
-      {/* Form Drawer / Card */}
       {showForm && (
-        <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-md space-y-6 animate-[fadeIn_0.2s_ease-out]">
-          <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-            <h3 className="text-lg font-bold text-slate-800">
-              {editingBook ? 'ویرایش اطلاعات کتاب' : 'ثبت کتاب جدید در فهرست'}
-            </h3>
-            <button
-              onClick={handleCancel}
-              className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+        <Panel className="animate-rise overflow-hidden">
+          <PanelHeader
+            title={editingBook ? 'ویرایش کتاب' : 'ثبت کتاب جدید'}
+            hint={editingBook ? `شناسه ${editingBook.id}` : undefined}
+            onClose={handleCancel}
+          />
 
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6 text-right">
-            {/* Title */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                عنوان کتاب
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="مثال: تلماسه (Dune)"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
-              />
+          <form onSubmit={handleSubmit} className="space-y-6 p-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="عنوان کتاب" htmlFor="book-title">
+                <Input
+                  id="book-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="مثال: تلماسه"
+                />
+              </Field>
+
+              <Field label="نویسنده" htmlFor="book-author">
+                <Input
+                  id="book-author"
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  placeholder="مثال: فرانک هربرت"
+                />
+              </Field>
             </div>
 
-            {/* Author */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                نویسنده
-              </label>
-              <input
-                type="text"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder="مثال: فرانک هربرت"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
-              />
-            </div>
-
-            {/* Cover Image Upload Zone */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                تصویر جلد کتاب (آپلود در MinIO / S3)
-              </label>
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+            {/* Cover */}
+            <Field label="تصویر جلد" hint="فایل مستقیماً در فضای ذخیره‌سازی S3 آپلود می‌شود.">
+              <div className="flex flex-col items-start gap-4 rounded-control border border-line bg-raised/50 p-4 sm:flex-row sm:items-center">
                 {coverImageUrl ? (
-                  <div className="relative group shrink-0">
+                  <div className="relative shrink-0">
                     <img
                       src={coverImageUrl}
-                      alt="Cover Preview"
-                      className="w-24 h-32 object-cover rounded-xl border border-slate-300 shadow-md"
+                      alt="پیش‌نمایش جلد"
+                      className="h-28 w-20 rounded-control border border-line object-cover"
                     />
                     <button
                       type="button"
                       onClick={() => setCoverImageUrl('')}
-                      className="absolute -top-2 -right-2 bg-rose-600 text-white p-1.5 rounded-full shadow hover:bg-rose-700 transition"
+                      aria-label="حذف تصویر جلد"
                       title="حذف تصویر جلد"
+                      className="absolute -top-2 -end-2 flex h-6 w-6 items-center justify-center rounded-full border border-line bg-surface text-critical transition-colors duration-150 hover:bg-critical-soft"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 ) : (
-                  <div className="w-24 h-32 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 bg-white shrink-0">
-                    <ImageIcon className="h-6 w-6 mb-1 text-slate-300" />
-                    <span className="text-[10px] font-bold">بدون تصویر</span>
+                  <div className="flex h-28 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-control border border-dashed border-line bg-surface text-faint">
+                    <ImageIcon className="h-5 w-5" />
+                    <span className="text-[0.625rem]">بدون جلد</span>
                   </div>
                 )}
 
-                <div className="flex-1 flex flex-col justify-center gap-2 text-center sm:text-right">
-                  <p className="text-xs text-slate-600 font-semibold">
-                    برای آپلود تصویر جلد یا تغییر تصویر کنونی، یک فایل عکس انتخاب کنید.
-                  </p>
-                  <div className="flex items-center gap-3 justify-center sm:justify-start mt-1">
-                    <label className="cursor-pointer px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-2">
-                      {uploadingCover ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>در حال آپلود...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-4 w-4" />
-                          <span>انتخاب و آپلود تصویر جلد</span>
-                        </>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleCoverUpload}
-                        disabled={uploadingCover}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-control border border-line bg-surface px-3 text-xs font-semibold text-ink transition-colors duration-150 ease-out-quart hover:bg-raised">
+                    {uploadingCover ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        در حال آپلود…
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        {coverImageUrl ? 'تغییر تصویر' : 'انتخاب تصویر'}
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverUpload}
+                      disabled={uploadingCover}
+                      className="hidden"
+                    />
+                  </label>
                   {coverImageUrl && (
-                    <p className="text-[11px] text-slate-400 font-mono truncate max-w-md" dir="ltr">
+                    <p className="num truncate text-[0.6875rem] text-faint" dir="ltr">
                       {coverImageUrl}
                     </p>
                   )}
                 </div>
               </div>
-            </div>
+            </Field>
 
-            {/* Multi Category Select */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                دسته‌بندی‌ها (می‌توانید چند مورد انتخاب کنید)
-              </label>
-              <div className="flex flex-wrap gap-2.5 bg-slate-50 border border-slate-200 rounded-xl p-3.5 min-h-[50px]">
-                {categories.length === 0 ? (
-                  <span className="text-xs text-slate-400">ابتدا یک دسته‌بندی در سیستم تعریف کنید</span>
-                ) : (
-                  categories.map((c) => {
+            {/* Categories */}
+            <Field
+              label="دسته‌بندی‌ها"
+              hint={categories.length > 0 ? 'حداقل یک مورد باید انتخاب شود.' : undefined}
+            >
+              {categories.length === 0 ? (
+                <p className="rounded-control border border-dashed border-line px-4 py-3 text-xs text-muted">
+                  ابتدا در صفحه دسته‌بندی‌ها حداقل یک مورد بسازید.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((c) => {
                     const isSelected = selectedCategoryIds.includes(c.id);
                     return (
-                      <button
+                      <Chip
                         key={c.id}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedCategoryIds(selectedCategoryIds.filter((id) => id !== c.id));
-                          } else {
-                            setSelectedCategoryIds([...selectedCategoryIds, c.id]);
-                          }
-                        }}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition duration-150 flex items-center gap-1.5 ${
-                          isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/20'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                        }`}
+                        selected={isSelected}
+                        onClick={() =>
+                          setSelectedCategoryIds(
+                            isSelected
+                              ? selectedCategoryIds.filter((id) => id !== c.id)
+                              : [...selectedCategoryIds, c.id],
+                          )
+                        }
                       >
-                        <span>{c.name}</span>
-                        {isSelected && <span className="text-[11px] bg-white/20 rounded-full h-4 w-4 flex items-center justify-center font-black">✓</span>}
-                      </button>
+                        {c.name}
+                      </Chip>
                     );
-                  })
-                )}
-              </div>
-            </div>
+                  })}
+                </div>
+              )}
+            </Field>
 
-            {/* Short Description */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                توضیح کوتاه
-              </label>
-              <input
-                type="text"
+            <Field label="توضیح کوتاه" htmlFor="book-short">
+              <Input
+                id="book-short"
                 value={shortDesc}
                 onChange={(e) => setShortDesc(e.target.value)}
-                placeholder="مثال: داستانی حماسی و هیجان‌انگیز در سیاره آراکیز"
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                placeholder="یک جمله که در فهرست اپلیکیشن دیده می‌شود"
               />
-            </div>
+            </Field>
 
-            {/* Full Description */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                توضیحات کامل
-              </label>
-              <textarea
+            <Field label="توضیحات کامل" htmlFor="book-full">
+              <Textarea
+                id="book-full"
                 value={fullDesc}
                 onChange={(e) => setFullDesc(e.target.value)}
-                placeholder="خلاصه کامل داستان یا معرفی کتاب را وارد کنید..."
+                placeholder="معرفی کامل کتاب…"
                 rows={4}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition resize-none"
               />
-            </div>
+            </Field>
 
-            {/* Pricing */}
-            <div className="md:col-span-2 bg-slate-50/70 border border-slate-100 rounded-2xl p-5 space-y-4">
-              <label className="block text-xs font-bold text-slate-500">دسترسی و قیمت</label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFree(true)}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
-                    isFree
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/20'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Unlock className="h-3.5 w-3.5" /> رایگان
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsFree(false)}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition flex items-center gap-2 ${
-                    !isFree
-                      ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20'
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  <Lock className="h-3.5 w-3.5" /> پولی
-                </button>
-              </div>
+            {/* Access & pricing */}
+            <div className="space-y-4 rounded-control border border-line bg-raised/50 p-4">
+              <Field label="دسترسی">
+                <SegmentedControl
+                  ariaLabel="نوع دسترسی کتاب"
+                  value={isFree ? 'free' : 'paid'}
+                  onChange={(next) => setIsFree(next === 'free')}
+                  options={[
+                    {
+                      value: 'free',
+                      label: (
+                        <>
+                          <Unlock className="h-3.5 w-3.5" /> رایگان
+                        </>
+                      ),
+                    },
+                    {
+                      value: 'paid',
+                      label: (
+                        <>
+                          <Lock className="h-3.5 w-3.5" /> پولی
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+              </Field>
 
               {!isFree && (
-                <div className="animate-[fadeIn_0.2s_ease-out]">
-                  <label className="block text-xs font-bold text-slate-500 mb-2">قیمت کتاب (تومان)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={priceToman}
-                    onChange={(e) => setPriceToman(e.target.value)}
-                    placeholder="مثال: 250000"
-                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 transition"
-                  />
-                  {priceToman !== '' && Number.isFinite(Number(priceToman)) && (
-                    <p className="text-xs text-indigo-600 font-bold mt-2">
-                      {formatToman(Number(priceToman))}
-                    </p>
-                  )}
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                    کاربران دارای اشتراک فعال بدون پرداخت این مبلغ به کتاب دسترسی دارند. برای رایگان
-                    کردن تعدادی از فصل‌ها، به صفحه جزئیات کتاب بروید.
-                  </p>
+                <div className="animate-rise space-y-4">
+                  <Field
+                    label="قیمت (تومان)"
+                    htmlFor="book-price"
+                    hint="کاربران دارای اشتراک فعال بدون پرداخت این مبلغ دسترسی دارند. برای رایگان کردن چند فصل، به جزئیات کتاب بروید."
+                  >
+                    <Input
+                      id="book-price"
+                      type="number"
+                      min={0}
+                      value={priceToman}
+                      onChange={(e) => setPriceToman(e.target.value)}
+                      placeholder="250000"
+                      className="num"
+                      dir="ltr"
+                    />
+                    {priceToman !== '' && Number.isFinite(Number(priceToman)) && (
+                      <p className="mt-1.5 text-xs font-semibold text-accent">
+                        {formatToman(Number(priceToman))}
+                      </p>
+                    )}
+                  </Field>
 
-                  {/* Points purchasing — independent of the toman price. */}
-                  <div className="mt-5 pt-5 border-t border-slate-200">
-                    <label className="flex items-center gap-3 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={pointsEnabled}
-                        onChange={(e) => setPointsEnabled(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
-                        <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-                        خرید با امتیاز کاربران فعال باشد
-                      </span>
-                    </label>
+                  <div className="border-t border-line pt-4">
+                    <Checkbox
+                      checked={pointsEnabled}
+                      onChange={setPointsEnabled}
+                      label="خرید با امتیاز فعال باشد"
+                      hint="کاربر می‌تواند این کتاب را با امتیازهایی که از مطالعه و آزمون‌ها به دست آورده باز کند. دسترسی دائمی خواهد بود."
+                    />
 
                     {pointsEnabled && (
-                      <div className="mt-3 animate-[fadeIn_0.2s_ease-out]">
-                        <label className="block text-xs font-bold text-slate-500 mb-2">
-                          امتیاز لازم برای خرید
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={pointsPrice}
-                          onChange={(e) => setPointsPrice(e.target.value)}
-                          placeholder="مثال: 500"
-                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 transition"
-                        />
-                        {pointsPrice !== '' && Number.isFinite(Number(pointsPrice)) && (
-                          <p className="text-xs text-indigo-600 font-bold mt-2">
-                            {toPersianDigits(Number(pointsPrice))} امتیاز
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                          کاربر می‌تواند این کتاب را با امتیازهایی که از مطالعه و آزمون‌ها به دست
-                          آورده باز کند. امتیاز مصرف‌شده از موجودی قابل خرج او کم می‌شود و دسترسی
-                          دائمی خواهد بود.
-                        </p>
+                      <div className="animate-rise mt-4">
+                        <Field label="امتیاز لازم" htmlFor="book-points">
+                          <Input
+                            id="book-points"
+                            type="number"
+                            min={0}
+                            value={pointsPrice}
+                            onChange={(e) => setPointsPrice(e.target.value)}
+                            placeholder="500"
+                            className="num"
+                            dir="ltr"
+                          />
+                          {pointsPrice !== '' && Number.isFinite(Number(pointsPrice)) && (
+                            <p className="mt-1.5 text-xs font-semibold text-accent">
+                              {toPersianDigits(Number(pointsPrice))} امتیاز
+                            </p>
+                          )}
+                        </Field>
                       </div>
                     )}
                   </div>
@@ -475,137 +464,129 @@ export const Books: React.FC = () => {
               )}
             </div>
 
-            <div className="md:col-span-2 flex justify-end gap-3 border-t border-slate-50 pt-4">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-5 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-sm font-bold transition"
-              >
+            <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
+              <Button type="button" onClick={handleCancel}>
                 انصراف
-              </button>
-              <button
-                type="submit"
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-150"
-              >
+              </Button>
+              <Button type="submit" variant="primary" loading={saving}>
                 {editingBook ? 'ذخیره تغییرات' : 'ثبت کتاب'}
-              </button>
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
       )}
 
-      {/* Books Table */}
-      <div className="bg-white border border-slate-100 rounded-3xl shadow-sm overflow-hidden">
+      <Panel className="overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center p-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
+          <SkeletonRows rows={5} />
         ) : books.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            هیچ کتابی در سیستم ثبت نشده است. روی «افزودن کتاب جدید» کلیک کنید.
-          </div>
+          <EmptyState
+            icon={BookOpen}
+            title="هنوز کتابی ثبت نشده"
+            hint="اولین کتاب را بسازید، سپس داخل جزئیات آن فصل‌ها و صفحات را اضافه کنید."
+            action={
+              !showForm && (
+                <Button variant="primary" onClick={() => setShowForm(true)}>
+                  <Plus className="h-4 w-4" />
+                  کتاب جدید
+                </Button>
+              )
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-right border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">کتاب و جلد</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">نویسنده</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">دسته‌بندی‌ها</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">قیمت</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-left">عملیات</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {books.map((book) => (
-                  <tr key={book.id} className="hover:bg-slate-50/40 transition group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        {book.cover_image_url ? (
-                          <img
-                            src={book.cover_image_url}
-                            alt={book.title}
-                            className="w-11 h-14 object-cover rounded-lg border border-slate-200 shadow-sm shrink-0"
-                          />
-                        ) : (
-                          <div className="bg-indigo-50 text-indigo-600 p-3 rounded-xl group-hover:bg-indigo-100 transition-colors shrink-0 flex items-center justify-center w-11 h-14">
-                            <BookOpen className="h-5 w-5" />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-bold text-slate-800 text-sm">{book.title}</p>
-                          <p className="text-xs text-slate-400 max-w-xs truncate mt-0.5">{book.short_description}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 font-semibold">{book.author}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1.5 max-w-xs">
-                        {book.categories && book.categories.length > 0 ? (
-                          book.categories.map((cat) => (
-                            <span
-                              key={cat.id}
-                              className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100"
-                            >
-                              {cat.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-500">
-                            بدون دسته‌بندی
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {book.is_free ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                          <Unlock className="h-3 w-3" /> رایگان
-                        </span>
+          <Table>
+            <thead>
+              <tr>
+                <Th>کتاب</Th>
+                <Th className="hidden md:table-cell">نویسنده</Th>
+                <Th className="hidden lg:table-cell">دسته‌بندی</Th>
+                <Th>دسترسی</Th>
+                <Th className="w-32 text-end">عملیات</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {books.map((book) => (
+                <Tr key={book.id}>
+                  <Td>
+                    <div className="flex items-center gap-3">
+                      {book.cover_image_url ? (
+                        <img
+                          src={book.cover_image_url}
+                          alt=""
+                          className="h-14 w-10 shrink-0 rounded-[6px] border border-line object-cover"
+                        />
                       ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-100 whitespace-nowrap">
-                            <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
-                          </span>
-                          {book.points_price > 0 && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">
-                              <Sparkles className="h-3 w-3" /> {toPersianDigits(book.points_price)} امتیاز
-                            </span>
-                          )}
-                        </div>
+                        <span className="flex h-14 w-10 shrink-0 items-center justify-center rounded-[6px] border border-line bg-raised text-faint">
+                          <BookOpen className="h-4 w-4" />
+                        </span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 text-left space-x-2 space-x-reverse">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink">{book.title}</p>
+                        <p className="max-w-xs truncate text-xs text-muted">
+                          {book.short_description}
+                        </p>
+                      </div>
+                    </div>
+                  </Td>
+                  <Td className="hidden text-sm text-muted md:table-cell">{book.author}</Td>
+                  <Td className="hidden lg:table-cell">
+                    <div className="flex max-w-[16rem] flex-wrap gap-1.5">
+                      {book.categories && book.categories.length > 0 ? (
+                        book.categories.map((cat) => (
+                          <Badge key={cat.id}>{cat.name}</Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-faint">—</span>
+                      )}
+                    </div>
+                  </Td>
+                  <Td>
+                    {book.is_free ? (
+                      <Badge tone="positive">
+                        <Unlock className="h-3 w-3" /> رایگان
+                      </Badge>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone="caution">
+                          <Lock className="h-3 w-3" /> {formatToman(book.price_toman)}
+                        </Badge>
+                        {book.points_price > 0 && (
+                          <Badge tone="accent">
+                            <Award className="h-3 w-3" />
+                            {toPersianDigits(book.points_price)} امتیاز
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center justify-end gap-1">
                       <Link
                         to={`/books/${book.id}`}
-                        className="inline-flex items-center justify-center p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
                         title="مدیریت فصل‌ها و صفحات"
+                        aria-label="مدیریت فصل‌ها و صفحات"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-control text-accent transition-colors duration-150 ease-out-quart hover:bg-accent-soft"
                       >
                         <ChevronLeft className="h-4 w-4" />
                       </Link>
-                      <button
-                        onClick={() => handleEditClick(book)}
-                        className="inline-flex items-center justify-center p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition"
-                        title="ویرایش اطلاعات کتاب"
-                      >
+                      <IconButton label="ویرایش کتاب" onClick={() => handleEditClick(book)}>
                         <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
+                      </IconButton>
+                      <IconButton
+                        label="حذف کتاب"
+                        tone="danger"
                         onClick={() => handleDelete(book.id)}
-                        className="inline-flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="حذف کتاب"
                       >
                         <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </IconButton>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
         )}
-      </div>
+      </Panel>
     </div>
   );
 };
-

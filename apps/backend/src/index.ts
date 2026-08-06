@@ -8,6 +8,7 @@ import chaptersRouter from './routes/chapters';
 import pagesRouter from './routes/pages';
 import authRouter from './routes/auth';
 import userAuthRouter from './routes/userAuth';
+import usersRouter from './routes/users';
 import progressRouter from './routes/progress';
 import bookmarksRouter from './routes/bookmarks';
 import quizRouter from './routes/quiz';
@@ -30,6 +31,9 @@ app.use(express.static(frontendPath));
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/user', userAuthRouter);
+// Plural: the admin directory. Distinct from '/api/user', which is the
+// signed-in app user's own account.
+app.use('/api/users', usersRouter);
 app.use('/api/user/progress', progressRouter);
 app.use('/api/user/bookmarks', bookmarksRouter);
 app.use('/api/quiz', quizRouter);

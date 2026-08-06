@@ -98,6 +98,106 @@ export type SubscriptionPlanInput = {
   isActive?: boolean;
 };
 
+/** A subscription window. `plan` is null once the plan behind it was deleted. */
+export interface UserSubscriptionRecord {
+  id: number;
+  startsAt: string;
+  expiresAt: string;
+  createdAt: string;
+  isActive?: boolean;
+  plan: {
+    id: number;
+    title: string;
+    durationMonths: number;
+    priceToman: number;
+  } | null;
+}
+
+/** One book the user unlocked, either with money or with earned XP. */
+export interface BookPurchaseRecord {
+  id: number;
+  bookId: number;
+  bookTitle: string;
+  bookAuthor: string;
+  coverImageUrl: string | null;
+  priceToman: number;
+  pointsSpent: number;
+  createdAt: string;
+}
+
+export interface AdminUser {
+  id: number;
+  phone: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  createdAt: string;
+  totalXp: number;
+  spentXp: number;
+  currentStreak: number;
+  purchaseCount: number;
+  subscriptionCount: number;
+  isSubscribed: boolean;
+  activeSubscription: UserSubscriptionRecord | null;
+}
+
+export interface UserListResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  users: AdminUser[];
+}
+
+export interface UserHistory {
+  purchases: BookPurchaseRecord[];
+  subscriptions: UserSubscriptionRecord[];
+}
+
+const PERSIAN_MONTHS = [
+  'فروردین',
+  'اردیبهشت',
+  'خرداد',
+  'تیر',
+  'مرداد',
+  'شهریور',
+  'مهر',
+  'آبان',
+  'آذر',
+  'دی',
+  'بهمن',
+  'اسفند',
+];
+
+/** Formats an ISO instant as a Jalali date in Tehran time, e.g. «۱۴ مهر ۱۴۰۴». */
+export function formatJalali(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  // Intl gives us the Jalali parts; we assemble them so the month name matches
+  // the rest of the panel rather than varying with the runtime's locale data.
+  const parts = new Intl.DateTimeFormat('en-u-ca-persian', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  const month = PERSIAN_MONTHS[Number(get('month')) - 1] ?? '';
+  // The Persian calendar era can be appended by Intl ("1404 AP"); strip it.
+  const year = get('year').replace(/\D/g, '');
+  return `${toPersianDigits(get('day'))} ${month} ${toPersianDigits(year)}`;
+}
+
+/**
+ * Whole days from now until `iso`. Negative once the instant has passed.
+ * Used to say how much of a subscription is left.
+ */
+export function daysUntil(iso: string): number {
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return 0;
+  return Math.ceil((target - Date.now()) / (24 * 60 * 60 * 1000));
+}
+
 /** Groups a toman amount in threes for display, e.g. 1500000 → «۱٬۵۰۰٬۰۰۰ تومان». */
 export function formatToman(amount: number): string {
   const grouped = Math.max(0, Math.trunc(amount)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '٬');
@@ -309,6 +409,25 @@ export const api = {
     request<{ message: string; archived: boolean }>(`/subscriptions/plans/${id}`, {
       method: 'DELETE',
     }),
+
+  // Users directory
+  getUsers: (params: { q?: string; page?: number; pageSize?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.q) search.set('q', params.q);
+    if (params.page) search.set('page', String(params.page));
+    if (params.pageSize) search.set('pageSize', String(params.pageSize));
+    const query = search.toString();
+    return request<UserListResponse>(`/users${query ? `?${query}` : ''}`);
+  },
+  getUserHistory: (userId: number) => request<UserHistory>(`/users/${userId}/history`),
+  grantSubscription: (userId: number, data: { planId?: number; durationMonths?: number }) =>
+    request<{ subscription: UserSubscriptionRecord; extended: boolean }>(
+      `/users/${userId}/subscriptions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
 
   // Auth
   sendOtp: (phone: string) =>

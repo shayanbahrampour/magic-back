@@ -1,119 +1,139 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Tag, 
-  BookOpen, 
+import {
+  LayoutDashboard,
+  Tag,
+  BookOpen,
   BookMarked,
   CreditCard,
-  Sparkles,
-  LogOut
+  Users,
+  LogOut,
+  Menu,
+  X,
 } from 'lucide-react';
+import { cx, IconButton } from './ui';
 
 interface LayoutProps {
   children: React.ReactNode;
   onLogout?: () => void;
 }
 
+const MENU = [
+  { path: '/', label: 'داشبورد', icon: LayoutDashboard },
+  { path: '/categories', label: 'دسته‌بندی‌ها', icon: Tag },
+  { path: '/books', label: 'کتاب‌ها', icon: BookOpen },
+  { path: '/users', label: 'کاربران', icon: Users },
+  { path: '/subscriptions', label: 'اشتراک‌ها', icon: CreditCard },
+];
+
 export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
   const location = useLocation();
   const adminPhone = localStorage.getItem('admin_phone') || '09*********';
+  const [navOpen, setNavOpen] = useState(false);
 
-  const menuItems = [
-    { path: '/', label: 'داشبورد مدیریت', icon: LayoutDashboard },
-    { path: '/categories', label: 'دسته‌بندی‌ها', icon: Tag },
-    { path: '/books', label: 'فهرست کتاب‌ها', icon: BookOpen },
-    { path: '/subscriptions', label: 'پلن‌های اشتراک', icon: CreditCard },
-  ];
+  // The drawer is a small-screen affordance only; navigating dismisses it.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
 
-  return (
-    <div className="flex h-screen w-full bg-slate-50 overflow-hidden text-slate-800 font-['Vazirmatn']">
-      {/* Sidebar (Sits on right side in RTL mode) */}
-      <aside className="w-64 bg-slate-900 text-slate-200 flex flex-col shadow-xl border-l border-slate-800">
-        {/* Brand */}
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="bg-indigo-500 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-500/20">
-            <BookMarked className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="font-extrabold text-lg leading-none text-white tracking-tight">
-              مجیک‌بوک
-            </h1>
-            <span className="text-xs text-slate-400 font-medium">پنل مدیریت محتوا</span>
-          </div>
+  const nav = (
+    <>
+      <div className="flex h-16 items-center gap-3 border-b border-line-soft px-5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-accent text-white">
+          <BookMarked className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold leading-tight text-ink">مجیک‌بوک</p>
+          <p className="text-xs leading-tight text-faint">پنل مدیریت محتوا</p>
         </div>
+        <IconButton
+          label="بستن منو"
+          onClick={() => setNavOpen(false)}
+          className="ms-auto lg:hidden"
+        >
+          <X className="h-4 w-4" />
+        </IconButton>
+      </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-1.5">
-          {menuItems.map((item) => {
+      <nav className="flex-1 overflow-y-auto p-3">
+        <ul className="space-y-0.5">
+          {MENU.map((item) => {
             const Icon = item.icon;
-            const isActive = 
-              location.pathname === item.path || 
+            const active =
+              location.pathname === item.path ||
               (item.path !== '/' && location.pathname.startsWith(item.path));
 
             return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  isActive
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
-                }`}
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                <span>{item.label}</span>
-              </Link>
+              <li key={item.path}>
+                <Link
+                  to={item.path}
+                  aria-current={active ? 'page' : undefined}
+                  className={cx(
+                    'flex h-10 items-center gap-3 rounded-control px-3 text-sm font-medium',
+                    'transition-colors duration-150 ease-out-quart',
+                    active
+                      ? 'bg-accent-soft font-semibold text-accent-strong'
+                      : 'text-muted hover:bg-raised hover:text-ink',
+                  )}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              </li>
             );
           })}
-        </nav>
+        </ul>
+      </nav>
 
-        {/* User Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-inner text-sm shrink-0">
-              مدیر
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-200 truncate">مدیر ارشد سیستم</p>
-              <p className="text-xs text-slate-400 font-mono truncate" dir="ltr">{adminPhone}</p>
-            </div>
-          </div>
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              title="خروج از حساب مدیریت"
-              className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          )}
+      <div className="flex items-center gap-3 border-t border-line-soft p-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-raised text-xs font-bold text-muted">
+          مد
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold text-ink">مدیر سیستم</p>
+          <p className="num truncate text-xs text-faint" dir="ltr">
+            {adminPhone}
+          </p>
         </div>
+        {onLogout && (
+          <IconButton label="خروج از حساب" tone="danger" onClick={onLogout}>
+            <LogOut className="h-4 w-4" />
+          </IconButton>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen w-full overflow-hidden bg-canvas text-ink">
+      {/* Persistent from lg up, drawer below it. */}
+      <aside className="hidden w-60 shrink-0 flex-col border-e border-line bg-surface lg:flex">
+        {nav}
       </aside>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Top Header */}
-        <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 shadow-sm z-10">
-          <div className="flex items-center gap-2.5">
-            <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse" />
-            <span className="text-sm font-bold text-slate-600">
-              به سیستم مدیریت کتاب و داستان‌های تعاملی خوش آمدید
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="px-3.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 flex items-center gap-1.5 shadow-sm">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-              نشست فعال
-            </span>
-          </div>
+      {navOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button
+            aria-label="بستن منو"
+            onClick={() => setNavOpen(false)}
+            className="absolute inset-0 bg-ink/25"
+          />
+          <aside className="animate-rise absolute inset-y-0 end-0 flex w-60 flex-col border-s border-line bg-surface">
+            {nav}
+          </aside>
+        </div>
+      )}
+
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface px-4 lg:hidden">
+          <IconButton label="باز کردن منو" onClick={() => setNavOpen(true)}>
+            <Menu className="h-5 w-5" />
+          </IconButton>
+          <span className="text-sm font-bold text-ink">مجیک‌بوک</span>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-8 bg-slate-50">
-          <div className="max-w-6xl mx-auto space-y-6 animate-[fadeIn_0.3s_ease-out]">
-            {children}
-          </div>
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1180px] px-6 py-8 lg:px-10">{children}</div>
         </main>
       </div>
     </div>

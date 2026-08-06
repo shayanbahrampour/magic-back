@@ -1,9 +1,219 @@
 @import "tailwindcss";
 
-/* Base adjustments for full height layout and Persian font */
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: 'Vazirmatn', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Light, low-chroma, border-first. Every neutral is tinted a few thousandths
+   of chroma toward the accent hue (258) so greys read as part of one family
+   instead of dead sRGB grey. Nothing here is pure #fff or #000.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Neutrals: canvas < raised < surface, with two border weights. */
+  --color-canvas: oklch(0.979 0.003 258);
+  --color-surface: oklch(0.996 0.0015 258);
+  --color-raised: oklch(0.967 0.004 258);
+  --color-line: oklch(0.921 0.006 258);
+  --color-line-soft: oklch(0.953 0.004 258);
+
+  /* Text: three steps is enough. Anything fainter fails contrast. */
+  --color-ink: oklch(0.235 0.017 262);
+  --color-muted: oklch(0.548 0.017 262);
+  --color-faint: oklch(0.672 0.014 262);
+
+  /* Accent. Carries primary actions and current selection, nothing else. */
+  --color-accent: oklch(0.556 0.213 258);
+  --color-accent-strong: oklch(0.487 0.205 258);
+  --color-accent-soft: oklch(0.959 0.028 258);
+  --color-accent-line: oklch(0.893 0.060 258);
+
+  /* Semantic states. */
+  --color-positive: oklch(0.532 0.128 156);
+  --color-positive-soft: oklch(0.960 0.034 156);
+  --color-positive-line: oklch(0.886 0.068 156);
+
+  --color-caution: oklch(0.578 0.132 72);
+  --color-caution-soft: oklch(0.964 0.040 78);
+  --color-caution-line: oklch(0.888 0.077 78);
+
+  --color-critical: oklch(0.545 0.192 26);
+  --color-critical-soft: oklch(0.962 0.024 26);
+  --color-critical-line: oklch(0.893 0.055 26);
+
+  /* Vazirmatn carries all Persian UI text. JetBrains Mono is reserved for
+     Latin technical values: ids, counts, urls, phone numbers. */
+  --font-sans: 'Vazirmatn', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Two radii, not five. Controls are tighter than the panels holding them. */
+  --radius-control: 9px;
+  --radius-panel: 14px;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* One focus treatment for the whole app. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-accent-soft);
+  }
+
+  /* Persian text sits better with slightly looser headings. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.45;
+    margin: 0;
+  }
+}
+
+/* Latin technical numerals. Tabular so columns of ids and counts line up. */
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Rich text. Shared by the editor surface and the read-only display so
+   authored content looks identical in both places.
+   --------------------------------------------------------------------------- */
+.richtext {
+  font-size: 0.875rem;
+  line-height: 1.85;
+  color: var(--color-ink);
+}
+
+.richtext p {
+  margin: 0 0 0.75rem;
+}
+
+.richtext p:last-child {
+  margin-bottom: 0;
+}
+
+.richtext h3 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.richtext h4 {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  margin: 1rem 0 0.5rem;
+}
+
+.richtext h3:first-child,
+.richtext h4:first-child {
+  margin-top: 0;
+}
+
+.richtext ul,
+.richtext ol {
+  margin: 0.75rem 0;
+  padding-inline-start: 1.4rem;
+}
+
+.richtext ul {
+  list-style: disc;
+}
+
+.richtext ol {
+  list-style: decimal;
+}
+
+.richtext li {
+  margin: 0.3rem 0;
+}
+
+/* Quotes read as a recessed block, not a striped card. */
+.richtext blockquote {
+  margin: 0.9rem 0;
+  padding: 0.75rem 1rem;
+  background: var(--color-raised);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.richtext strong,
+.richtext b {
+  font-weight: 700;
+}
+
+.richtext em,
+.richtext i {
+  font-style: italic;
+}
+
+.richtext u {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.richtext s {
+  text-decoration: line-through;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion. State changes only: reveal and skeleton shimmer.
+   --------------------------------------------------------------------------- */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.18s var(--ease-out-quart) both;
+}
+
+.animate-breathe {
+  animation: breathe 1.4s var(--ease-out-quart) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

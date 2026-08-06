@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
-import { BookMarked, Sparkles, Phone, KeyRound, ArrowRight, Loader2 } from 'lucide-react';
+import { BookMarked, ArrowLeft } from 'lucide-react';
+import { Button, Field, Input, Notice, controlClass, cx } from '../components/ui';
 
 interface LoginProps {
   onSuccess: (token: string, phone: string) => void;
@@ -58,127 +59,108 @@ export const Login: React.FC<LoginProps> = ({ onSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4 font-['Vazirmatn'] text-slate-100" dir="rtl">
-      {/* Decorative background glow */}
-      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-      <div className="max-w-md w-full bg-slate-800/80 backdrop-blur-xl border border-slate-700/60 rounded-3xl p-8 shadow-2xl relative z-10 animate-[fadeIn_0.3s_ease-out]">
-        {/* Brand Header */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="bg-gradient-to-tr from-indigo-500 to-purple-600 p-4 rounded-2xl text-white shadow-lg shadow-indigo-500/30 mb-4">
-            <BookMarked className="h-9 w-9" />
-          </div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            ورود به پنل مدیریت مجیک‌بوک
-            <Sparkles className="h-5 w-5 text-amber-400 animate-pulse" />
-          </h1>
-          <p className="text-sm text-slate-400 mt-2 font-medium">
-            لطفاً برای دسترسی به پنل مدیریت، احراز هویت کنید.
+    <div
+      className="flex min-h-screen w-full items-center justify-center bg-canvas px-6 py-12"
+      dir="rtl"
+    >
+      <div className="w-full max-w-[400px]">
+        <div className="mb-9">
+          <span className="mb-6 flex h-11 w-11 items-center justify-center rounded-panel bg-accent text-white">
+            <BookMarked className="h-5 w-5" />
+          </span>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">ورود به پنل مدیریت</h1>
+          <p className="mt-1.5 text-sm text-muted">
+            {step === 'PHONE'
+              ? 'شماره موبایل مدیر را وارد کنید تا کد یک‌بارمصرف برایتان ارسال شود.'
+              : 'کد ۵ رقمی پیامک‌شده را وارد کنید.'}
           </p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-sm font-medium leading-relaxed animate-[shake_0.2s_ease-in-out]">
-            {error}
+          <div className="mb-5">
+            <Notice tone="critical" onDismiss={() => setError('')}>
+              {error}
+            </Notice>
           </div>
         )}
 
         {step === 'PHONE' ? (
-          <form onSubmit={handleSendOtp} className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-slate-300 mb-2">
-                شماره موبایل
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  dir="ltr"
-                  placeholder="09123456789"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-slate-700 rounded-2xl py-3.5 px-4 pr-12 text-left text-white font-mono text-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-600"
-                  required
-                />
-                <Phone className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              </div>
-              <p className="text-xs text-slate-400 mt-2">
-                کد تایید یک‌بارمصرف (OTP) به شماره وارد شده پیامک می‌شود.
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-indigo-600/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+          <form onSubmit={handleSendOtp} className="space-y-5">
+            <Field
+              label="شماره موبایل"
+              htmlFor="login-phone"
+              hint="کد تایید به همین شماره پیامک می‌شود."
             >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>در حال ارسال کد...</span>
-                </>
-              ) : (
-                <>
-                  <span>دریافت کد تایید</span>
-                  <ArrowRight className="h-5 w-5 rotate-180" />
-                </>
-              )}
-            </button>
+              <Input
+                id="login-phone"
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                dir="ltr"
+                placeholder="09123456789"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="num text-start text-base"
+                required
+              />
+            </Field>
+
+            <Button type="submit" variant="primary" loading={loading} className="w-full">
+              {loading ? 'در حال ارسال…' : 'دریافت کد تایید'}
+            </Button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-6">
-            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-center">
-              <p className="text-sm text-indigo-300 font-medium">
-                کد تایید به شماره <span className="font-mono font-bold text-white" dir="ltr">{phone}</span> ارسال شد.
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-control border border-line bg-surface px-4 py-3">
+              <p className="text-xs text-muted">
+                ارسال‌شده به{' '}
+                <span className="num font-semibold text-ink" dir="ltr">
+                  {phone}
+                </span>
               </p>
-              <p className="mt-1 text-xs text-slate-400">کد تا ۲ دقیقه معتبر است.</p>
               <button
                 type="button"
-                onClick={() => setStep('PHONE')}
-                className="block mx-auto mt-2 text-xs text-slate-400 hover:text-indigo-300 transition-colors underline"
+                onClick={() => {
+                  setStep('PHONE');
+                  setOtp('');
+                  setError('');
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors duration-150 hover:text-accent-strong"
               >
-                ویرایش شماره موبایل
+                <ArrowLeft className="h-3.5 w-3.5" />
+                تغییر شماره
               </button>
             </div>
 
-            <div>
-              <label className="block text-sm font-bold text-slate-300 mb-2 text-center">
-                کد ۵ رقمی تایید
-              </label>
-              <div className="relative max-w-xs mx-auto">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={5}
-                  dir="ltr"
-                  placeholder="•••••"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-slate-700 rounded-2xl py-3.5 px-4 pr-12 text-center text-white font-mono text-2xl tracking-[0.5em] focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all placeholder:text-slate-600 placeholder:tracking-normal"
-                  autoFocus
-                  required
-                />
-                <KeyRound className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-              </div>
-            </div>
+            <Field label="کد تایید" htmlFor="login-otp" hint="کد تا ۲ دقیقه معتبر است.">
+              <input
+                id="login-otp"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={5}
+                dir="ltr"
+                placeholder="•••••"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                className={cx(
+                  controlClass,
+                  'num py-3 text-center text-xl tracking-[0.45em] placeholder:tracking-[0.2em]',
+                )}
+                autoFocus
+                required
+              />
+            </Field>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-emerald-600/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>در حال بررسی...</span>
-                </>
-              ) : (
-                <span>ورود به پنل مدیریت</span>
-              )}
-            </button>
+            <Button type="submit" variant="primary" loading={loading} className="w-full">
+              {loading ? 'در حال بررسی…' : 'ورود'}
+            </Button>
           </form>
         )}
+
+        <p className="mt-8 text-center text-xs text-faint">
+          دسترسی به این پنل محدود به شماره‌های مجاز مدیریت است.
+        </p>
       </div>
     </div>
   );

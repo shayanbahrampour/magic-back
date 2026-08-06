@@ -1,7 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { api, formatToman, toPersianDigits } from '../services/api';
 import type { SubscriptionPlan } from '../services/api';
-import { CreditCard, Plus, X, Edit2, Trash2, Archive, CalendarClock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Archive, ArchiveRestore, CalendarClock } from 'lucide-react';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Notice,
+  PageHeader,
+  Panel,
+  PanelHeader,
+  SegmentedControl,
+  SkeletonRows,
+  cx,
+} from '../components/ui';
 
 // Common periods offered as one-click presets. An admin can still type any
 // number of months, which is the point of keeping `duration_months` free-form.
@@ -82,7 +97,7 @@ export const Subscriptions: React.FC = () => {
     try {
       if (editing) {
         await api.updateSubscriptionPlan(editing.id, { title, durationMonths, priceToman });
-        setSuccess('پلن اشتراک با موفقیت به‌روزرسانی شد.');
+        setSuccess('پلن اشتراک به‌روزرسانی شد.');
       } else {
         await api.createSubscriptionPlan({ title, durationMonths, priceToman });
         setSuccess('پلن اشتراک جدید ایجاد شد.');
@@ -122,194 +137,171 @@ export const Subscriptions: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 text-right">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2.5 tracking-tight">
-            <CreditCard className="h-6 w-6 text-indigo-500" /> پلن‌های اشتراک
-          </h2>
-          <p className="text-sm text-slate-500 mt-1.5">
-            کاربران دارای اشتراک فعال به تمام کتاب‌ها دسترسی دارند.
-          </p>
-        </div>
-        {!showForm && (
-          <button
-            onClick={startCreate}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/25 transition duration-150 flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" /> افزودن پلن جدید
-          </button>
-        )}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="اشتراک‌ها"
+        description="کاربران دارای اشتراک فعال به تمام کتاب‌ها دسترسی دارند، صرف‌نظر از قیمت هر کتاب."
+        actions={
+          !showForm && (
+            <Button variant="primary" onClick={startCreate}>
+              <Plus className="h-4 w-4" />
+              پلن جدید
+            </Button>
+          )
+        }
+      />
 
       {error && (
-        <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100 text-sm font-medium">
+        <Notice tone="critical" onDismiss={() => setError('')}>
           {error}
-        </div>
+        </Notice>
       )}
       {success && (
-        <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl border border-emerald-100 text-sm font-medium">
+        <Notice tone="positive" onDismiss={() => setSuccess('')}>
           {success}
-        </div>
+        </Notice>
       )}
 
       {showForm && (
-        <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-md space-y-5 animate-[fadeIn_0.2s_ease-out]">
-          <div className="flex justify-between items-center pb-2 border-b border-slate-50">
-            <h4 className="font-bold text-slate-800 text-sm">
-              {editing ? 'ویرایش پلن اشتراک' : 'ایجاد پلن اشتراک جدید'}
-            </h4>
-            <button onClick={resetForm} className="text-slate-400 hover:text-slate-600">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+        <Panel className="animate-rise overflow-hidden">
+          <PanelHeader
+            title={editing ? 'ویرایش پلن' : 'پلن جدید'}
+            hint={editing ? `شناسه ${editing.id}` : undefined}
+            onClose={resetForm}
+          />
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">مدت اشتراک (ماه)</label>
-              <div className="flex flex-wrap gap-2 mb-3">
-                {PRESETS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMonths(String(m))}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition ${
-                      Number(months) === m
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-600/20'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {presetLabel(m)}
-                  </button>
-                ))}
+          <form onSubmit={handleSubmit} className="space-y-5 p-5">
+            <Field
+              label="مدت اشتراک (ماه)"
+              htmlFor="plan-months"
+              hint="هر تعداد ماه دلخواه قابل تعریف است، نه فقط گزینه‌های بالا."
+            >
+              <div className="mb-3">
+                <SegmentedControl
+                  ariaLabel="مدت اشتراک"
+                  value={Number(months)}
+                  onChange={(next) => setMonths(String(next))}
+                  options={PRESETS.map((m) => ({ value: m, label: presetLabel(m) }))}
+                />
               </div>
-              <input
+              <Input
+                id="plan-months"
                 type="number"
                 min={1}
+                dir="ltr"
+                className="num max-w-[10rem]"
                 value={months}
                 onChange={(e) => setMonths(e.target.value)}
-                placeholder="مثال: ۲ برای اشتراک دو ماهه"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
               />
-              <p className="text-xs text-slate-400 mt-1.5">
-                هر تعداد ماه دلخواه قابل تعریف است، نه فقط گزینه‌های بالا.
-              </p>
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">قیمت (تومان)</label>
-              <input
+            <Field label="قیمت (تومان)" htmlFor="plan-price">
+              <Input
+                id="plan-price"
                 type="number"
                 min={0}
+                dir="ltr"
+                className="num max-w-[16rem]"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="مثال: 1000000"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                placeholder="1000000"
               />
               {price !== '' && Number.isFinite(Number(price)) && (
-                <p className="text-xs text-indigo-600 font-bold mt-1.5">{formatToman(Number(price))}</p>
+                <p className="mt-1.5 text-xs font-semibold text-accent">
+                  {formatToman(Number(price))}
+                </p>
               )}
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-2">
-                عنوان نمایشی (اختیاری)
-              </label>
-              <input
-                type="text"
+            <Field label="عنوان نمایشی (اختیاری)" htmlFor="plan-title">
+              <Input
+                id="plan-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={`اگر خالی بماند: «اشتراک ${months || '۱'} ماهه»`}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition"
+                placeholder={`اگر خالی بماند: «اشتراک ${toPersianDigits(months || '1')} ماهه»`}
               />
-            </div>
+            </Field>
 
-            <div className="flex gap-2 justify-end pt-2 border-t border-slate-50">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold hover:bg-slate-50 transition"
-              >
+            <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
+              <Button type="button" onClick={resetForm}>
                 انصراف
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/10 transition"
-              >
-                {saving ? 'در حال ذخیره...' : editing ? 'ذخیره تغییرات' : 'ایجاد پلن'}
-              </button>
+              </Button>
+              <Button type="submit" variant="primary" loading={saving}>
+                {editing ? 'ذخیره تغییرات' : 'ایجاد پلن'}
+              </Button>
             </div>
           </form>
-        </div>
+        </Panel>
       )}
 
-      <div className="bg-white border border-slate-100 rounded-3xl shadow-sm overflow-hidden">
+      <Panel className="overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-          </div>
+          <SkeletonRows rows={3} />
         ) : plans.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-            <CalendarClock className="h-8 w-8 text-slate-300" />
-            <p>هنوز هیچ پلن اشتراکی تعریف نشده است. روی «افزودن پلن جدید» کلیک کنید.</p>
-          </div>
+          <EmptyState
+            icon={CalendarClock}
+            title="هیچ پلن اشتراکی تعریف نشده"
+            hint="تا وقتی پلنی وجود نداشته باشد، کاربران فقط می‌توانند کتاب‌ها را تکی بخرند."
+            action={
+              !showForm && (
+                <Button variant="primary" size="sm" onClick={startCreate}>
+                  <Plus className="h-4 w-4" />
+                  پلن جدید
+                </Button>
+              )
+            }
+          />
         ) : (
-          <div className="divide-y divide-slate-50">
+          <ul className="divide-y divide-line-soft">
             {plans.map((plan) => (
-              <div
+              <li
                 key={plan.id}
-                className={`px-6 py-4 flex justify-between items-center gap-4 transition duration-150 ${
-                  plan.isActive ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 opacity-70'
-                }`}
+                className={cx(
+                  'flex flex-wrap items-center gap-4 px-5 py-4 transition-colors duration-150 ease-out-quart',
+                  plan.isActive ? 'hover:bg-raised/50' : 'bg-raised/40',
+                )}
               >
-                <div className="flex items-center gap-4 min-w-0">
-                  <span className="h-11 w-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-100 shrink-0">
-                    <CalendarClock className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-slate-800 text-sm truncate">{plan.title}</h4>
-                      {!plan.isActive && (
-                        <span className="px-2 py-0.5 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-full">
-                          بایگانی‌شده
-                        </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4
+                      className={cx(
+                        'text-sm font-semibold',
+                        plan.isActive ? 'text-ink' : 'text-muted',
                       )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      مدت: {toPersianDigits(plan.durationMonths)} ماه ·{' '}
-                      <span className="font-bold text-indigo-600">{formatToman(plan.priceToman)}</span>
-                    </p>
+                    >
+                      {plan.title}
+                    </h4>
+                    {!plan.isActive && <Badge>بایگانی‌شده</Badge>}
                   </div>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {toPersianDigits(plan.durationMonths)} ماه ·{' '}
+                    <span className="font-semibold text-ink">{formatToman(plan.priceToman)}</span>
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
+
+                <div className="flex items-center gap-1">
+                  <IconButton
+                    label={plan.isActive ? 'بایگانی کردن پلن' : 'فعال کردن پلن'}
                     onClick={() => handleToggleActive(plan)}
-                    className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl transition"
-                    title={plan.isActive ? 'بایگانی کردن پلن' : 'فعال کردن پلن'}
                   >
-                    <Archive className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => startEdit(plan)}
-                    className="p-2 text-slate-500 hover:bg-slate-100 rounded-xl transition"
-                    title="ویرایش پلن"
-                  >
+                    {plan.isActive ? (
+                      <Archive className="h-4 w-4" />
+                    ) : (
+                      <ArchiveRestore className="h-4 w-4" />
+                    )}
+                  </IconButton>
+                  <IconButton label="ویرایش پلن" onClick={() => startEdit(plan)}>
                     <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(plan)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-xl transition"
-                    title="حذف پلن"
-                  >
+                  </IconButton>
+                  <IconButton label="حذف پلن" tone="danger" onClick={() => handleDelete(plan)}>
                     <Trash2 className="h-4 w-4" />
-                  </button>
+                  </IconButton>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
-      </div>
+      </Panel>
     </div>
   );
 };
