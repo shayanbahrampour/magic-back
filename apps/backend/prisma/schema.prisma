@@ -27,6 +27,7 @@ model User {
   bookmarks        Bookmark[]
   subscriptions    UserSubscription[]
   book_purchases   BookPurchase[]
+  payments         Payment[]
 }
 
 // A one-time code sent by SMS. Codes are stored hashed (never in the clear),
@@ -72,6 +73,7 @@ model Book {
   categories        Category[]
   chapters          Chapter[]
   purchases         BookPurchase[]
+  payments          Payment[]
 }
 
 model Chapter {
@@ -236,6 +238,7 @@ model SubscriptionPlan {
   created_at      DateTime           @default(now())
   updated_at      DateTime           @updatedAt
   subscriptions   UserSubscription[]
+  payments        Payment[]
 }
 
 // A granted subscription window. A user is "subscribed" when they have any row
@@ -271,4 +274,53 @@ model BookPurchase {
 
   @@unique([user_id, book_id])
   @@index([user_id])
+}
+
+// One checkout attempt through the Zibal internet payment gateway (IPG).
+//
+// The row is created *before* the user is sent to the bank, so an abandoned or
+// failed payment leaves an auditable trace rather than nothing. `status` walks
+// `pending -> paid -> verified`, with `failed`/`canceled` as terminal dead ends:
+//
+//   pending   the gateway session was opened; the user has not paid yet
+//   paid      the bank reported a successful payment, not yet verified by us
+//   verified  we called Zibal's verify endpoint and the money is settled
+//   failed    the gateway or the bank rejected the payment
+//   canceled  the user backed out of the gateway
+//
+// `granted` is deliberately separate from `status`: it records whether the
+// entitlement (a subscription window or a book purchase) has actually been
+// handed out, so a retry of the verify step can never grant it twice.
+model Payment {
+  id             Int               @id @default(autoincrement())
+  user_id        Int
+  user           User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  // 'subscription' | 'book' — which of the two nullable targets below applies.
+  kind           String
+  plan_id        Int?
+  plan           SubscriptionPlan? @relation(fields: [plan_id], references: [id], onDelete: SetNull)
+  book_id        Int?
+  book           Book?             @relation(fields: [book_id], references: [id], onDelete: SetNull)
+  // The price at checkout time, kept in both units: tomans is what the app and
+  // the admin panel speak, rials is what Zibal is sent.
+  amount_toman   Int
+  amount_rial    Int
+  // Our own reference, sent to Zibal as `orderId` and shown in their reports.
+  order_id       String            @unique
+  // Zibal's `trackId`. A string because the values exceed a 32-bit int.
+  track_id       String?           @unique
+  status         String            @default("pending")
+  // Zibal's numeric payment status (their "جدول وضعیت‌ها"), kept for support.
+  gateway_status Int?
+  ref_number     String?
+  card_number    String?
+  granted        Boolean           @default(false)
+  failure_reason String?
+  paid_at        DateTime?
+  verified_at    DateTime?
+  created_at     DateTime          @default(now())
+  updated_at     DateTime          @updatedAt
+
+  @@index([user_id])
+  @@index([status])
 }
