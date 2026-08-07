@@ -6,7 +6,7 @@
 //                    sandbox merchant `zibal`, which accepts any card and never
 //                    moves real money, so a local backend works out of the box.
 //   PUBLIC_BASE_URL  the publicly reachable origin of *this* backend, e.g.
-//                    `https://magicapi.gerdoo.app`. Zibal redirects the payer
+//                    `https://api.magic-book.ir`. Zibal redirects the payer
 //                    here after the bank, so it must be https and reachable
 //                    from the open internet.
 //

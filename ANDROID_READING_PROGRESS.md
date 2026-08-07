@@ -7,7 +7,7 @@ rollups.
 
 ## Context
 
-- **Base URL:** `https://magicapi.gerdoo.app`
+- **Base URL:** `https://api.magic-book.ir`
 - **Auth:** All progress endpoints require the user access token (the same
   `Bearer` token returned by `/api/user/verify-otp` or `/api/user/complete-profile`,
   role `USER`). Send it as `Authorization: Bearer <token>`. See
