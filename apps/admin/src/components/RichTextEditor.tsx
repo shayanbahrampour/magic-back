@@ -148,7 +148,10 @@ export function RichTextEditor({
   className = '',
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const lastReportedValue = useRef(value);
+  // Start with a sentinel so an existing value is written into the unmanaged
+  // contentEditable DOM on its first mount. Starting this ref with `value`
+  // made edit forms look empty until the value changed a second time.
+  const lastReportedValue = useRef<string | null>(null);
   const [activeStates, setActiveStates] = useState<ActiveStates>(INITIAL_STATES);
 
   useEffect(() => {
@@ -284,10 +287,49 @@ export function RichTextDisplay({
   className?: string;
 }) {
   if (!content) return null;
+
+  // Story HTML is authored by admins, but it is still persisted input. Keep
+  // the small formatting vocabulary supported by the toolbar and discard
+  // scripts, event handlers, links and arbitrary attributes before rendering.
+  const sanitize = (html: string) => {
+    if (typeof document === 'undefined') return '';
+    const template = document.createElement('template');
+    template.innerHTML = html;
+    const allowed = new Set([
+      'P', 'BR', 'DIV', 'STRONG', 'B', 'EM', 'I', 'U', 'S',
+      'UL', 'OL', 'LI', 'H3', 'H4', 'BLOCKQUOTE', 'SPAN',
+    ]);
+
+    const clean = (node: Node) => {
+      Array.from(node.childNodes).forEach((child) => {
+        if (child.nodeType !== Node.ELEMENT_NODE) return;
+        const element = child as HTMLElement;
+        if (!allowed.has(element.tagName)) {
+          element.replaceWith(...Array.from(element.childNodes));
+          return;
+        }
+        Array.from(element.attributes).forEach((attribute) => {
+          if (attribute.name !== 'style') element.removeAttribute(attribute.name);
+        });
+        if (element.hasAttribute('style')) {
+          const alignment = element.style.textAlign;
+          element.removeAttribute('style');
+          if (['left', 'right', 'center', 'justify'].includes(alignment)) {
+            element.style.textAlign = alignment;
+          }
+        }
+        clean(element);
+      });
+    };
+
+    clean(template.content);
+    return template.innerHTML;
+  };
+
   return (
     <div
       className={cx('richtext rounded-control border border-line bg-raised/40 p-4', className)}
-      dangerouslySetInnerHTML={{ __html: content }}
+      dangerouslySetInnerHTML={{ __html: sanitize(content) }}
     />
   );
 }

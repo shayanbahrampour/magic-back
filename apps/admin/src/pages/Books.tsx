@@ -94,7 +94,6 @@ export const Books: React.FC = () => {
     setPointsEnabled(Boolean(book.points_price));
     setPointsPrice(book.points_price ? String(book.points_price) : '');
     setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancel = () => {
@@ -565,8 +564,9 @@ export const Books: React.FC = () => {
                         to={`/books/${book.id}`}
                         title="مدیریت فصل‌ها و صفحات"
                         aria-label="مدیریت فصل‌ها و صفحات"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-control text-accent transition-colors duration-150 ease-out-quart hover:bg-accent-soft"
+                        className="inline-flex h-8 items-center gap-1 rounded-control px-2.5 text-xs font-semibold text-accent transition-colors duration-150 ease-out-quart hover:bg-accent-soft"
                       >
+                        ویرایش محتوا
                         <ChevronLeft className="h-4 w-4" />
                       </Link>
                       <IconButton label="ویرایش کتاب" onClick={() => handleEditClick(book)}>
