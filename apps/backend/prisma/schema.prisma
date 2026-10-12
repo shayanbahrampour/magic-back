@@ -28,6 +28,7 @@ model User {
   subscriptions    UserSubscription[]
   book_purchases   BookPurchase[]
   payments         Payment[]
+  book_completions BookCompletion[]
 }
 
 // A one-time code sent by SMS. Codes are stored hashed (never in the clear),
@@ -74,6 +75,7 @@ model Book {
   chapters          Chapter[]
   purchases         BookPurchase[]
   payments          Payment[]
+  completions       BookCompletion[]
 }
 
 model Chapter {
@@ -152,6 +154,21 @@ model UserStats {
   last_activity_date DateTime?
   created_at         DateTime  @default(now())
   updated_at         DateTime  @updatedAt
+}
+
+// The first time a user finished every chapter of a book. The unique pair is
+// what makes the finish-the-book XP bonus a one-off: un-completing and
+// re-completing a chapter later can't award it again.
+model BookCompletion {
+  id           Int      @id @default(autoincrement())
+  user_id      Int
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  book_id      Int
+  book         Book     @relation(fields: [book_id], references: [id], onDelete: Cascade)
+  completed_at DateTime @default(now())
+
+  @@unique([user_id, book_id])
+  @@index([user_id])
 }
 
 // One row per (user, activity-day). `date` is the UTC instant of Tehran-midnight

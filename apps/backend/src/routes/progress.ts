@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { recordActivity, getStats, XP } from '../services/gamification';
@@ -43,10 +44,11 @@ function shapeChapterProgress(
 }
 
 // PUT /api/user/progress/chapters/:chapterId
-// Body: { lastPage: number, completed?: boolean }
+// Body: { lastPage: number }
 // Records how far the user has read in a chapter. `last_page` only ever moves
-// forward (furthest page reached). The chapter is auto-completed once the user
-// reaches the final page, or when `completed: true` is passed explicitly.
+// forward (furthest page reached). The chapter is completed only by reaching its
+// final page — there is no way to mark it complete otherwise — and stays
+// completed from then on. A `completed` field in the body is ignored.
 router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
   const userId = req.appUser!.id;
   const chapterId = Number(req.params.chapterId);
@@ -59,8 +61,6 @@ router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
   if (rawLastPage === undefined || !Number.isFinite(lastPage) || lastPage < 0) {
     return res.status(400).json({ error: 'lastPage باید یک عدد نامنفی باشد.' });
   }
-  const explicitCompleted =
-    typeof req.body?.completed === 'boolean' ? (req.body.completed as boolean) : undefined;
 
   try {
     const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
@@ -78,7 +78,8 @@ router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
     const furthestPage = Math.max(existing?.last_page ?? 0, cappedIncoming);
 
     const reachedEnd = totalPages > 0 && furthestPage >= totalPages;
-    const completed = explicitCompleted ?? (existing?.completed || reachedEnd);
+    // Never un-completed either: flipping it off and on again would re-award XP.
+    const completed = Boolean(existing?.completed) || reachedEnd;
     // Preserve the original completion timestamp once set.
     const completedAt = completed ? existing?.completed_at ?? new Date() : null;
 
@@ -102,11 +103,40 @@ router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
     // time additionally grants XP. `justCompleted` guards against re-awarding on
     // repeat calls once the chapter is already marked complete.
     const justCompleted = completed && !existing?.completed;
-    const stats = await recordActivity(userId, justCompleted ? XP.CHAPTER_COMPLETE : 0);
+    const chapterXp = justCompleted ? XP.CHAPTER_COMPLETE : 0;
+
+    // Completing a chapter may finish the whole book — every chapter done, in
+    // whatever order — which earns a one-off bonus on top.
+    let bookXp = 0;
+    if (justCompleted) {
+      const [chapterCount, completedCount] = await Promise.all([
+        prisma.chapter.count({ where: { book_id: chapter.book_id } }),
+        prisma.readingProgress.count({
+          where: { user_id: userId, completed: true, chapter: { book_id: chapter.book_id } },
+        }),
+      ]);
+      if (chapterCount > 0 && completedCount >= chapterCount) {
+        try {
+          await prisma.bookCompletion.create({ data: { user_id: userId, book_id: chapter.book_id } });
+          bookXp = XP.BOOK_COMPLETE;
+        } catch (err) {
+          // Already finished this book before (or a concurrent request just
+          // recorded it) — the bonus was paid then.
+          if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+            throw err;
+          }
+        }
+      }
+    }
+
+    const stats = await recordActivity(userId, chapterXp + bookXp);
 
     res.json({
       ...shapeChapterProgress(chapterId, totalPages, saved),
-      xpAwarded: justCompleted ? XP.CHAPTER_COMPLETE : 0,
+      xpAwarded: chapterXp + bookXp,
+      // Set when this request finished the book for the first time.
+      bookCompleted: bookXp > 0,
+      bookXpAwarded: bookXp,
       stats,
     });
   } catch (error) {

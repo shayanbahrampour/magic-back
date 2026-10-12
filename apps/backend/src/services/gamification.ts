@@ -4,9 +4,10 @@ import { tehranDayIndex, tehranDayStart } from '../utils/datetime';
 // XP awarded for various in-app achievements. Tune freely — these are the single
 // source of truth used by every route that grants XP.
 export const XP = {
-  CHAPTER_COMPLETE: 50, // finishing a chapter (lesson)
-  QUIZ_PER_CORRECT: 10, // per correct quiz answer
-  QUIZ_PASS_BONUS: 25, // extra XP when the quiz is passed
+  CHAPTER_COMPLETE: 5, // finishing a chapter (lesson)
+  QUIZ_PER_CORRECT: 1, // per correct quiz answer
+  QUIZ_PASS_BONUS: 3, // extra XP when the quiz is passed (25 / 10, rounded up)
+  BOOK_COMPLETE: 10, // first time every chapter of a book is completed
 };
 
 export type UserStatsShape = {

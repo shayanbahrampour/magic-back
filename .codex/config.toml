@@ -1,0 +1,3 @@
+[mcp_servers.gerdoo]
+command = "gerdoo"
+args = ["mcp"]

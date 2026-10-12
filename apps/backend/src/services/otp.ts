@@ -8,6 +8,9 @@ const TTL_MS = 2 * 60 * 1000; // a code is good for 2 minutes
 const MAX_ATTEMPTS = 5; // wrong guesses before the code is burned
 const RESEND_COOLDOWN_MS = 60 * 1000; // at most one SMS per minute per phone
 const MAX_PER_HOUR = 5; // and no more than 5 in an hour
+// Admins who hit the hourly cap are only locked out briefly: the admin numbers
+// are whitelisted, so the SMS-bombing risk the cap guards against is small.
+const ADMIN_LOCKOUT_MS = 2 * 60 * 1000;
 
 // Codes are hashed with a server-side pepper, so a leaked database still can't
 // be used to sign in. Reuses JWT_SECRET rather than adding another secret to
@@ -57,7 +60,17 @@ export async function issueOtp(phone: string, purpose: OtpPurpose): Promise<Issu
   const recentCount = await prisma.otpCode.count({
     where: { phone, purpose, created_at: { gte: lastHour } },
   });
-  if (recentCount >= MAX_PER_HOUR) {
+  if (recentCount >= MAX_PER_HOUR && purpose === 'ADMIN') {
+    // `latest` exists here: the hourly count is non-zero.
+    const lockedForMs = ADMIN_LOCKOUT_MS - (now.getTime() - latest!.created_at.getTime());
+    if (lockedForMs > 0) {
+      return {
+        ok: false,
+        error: 'تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً ۲ دقیقه دیگر تلاش کنید.',
+        retryAfterSeconds: Math.ceil(lockedForMs / 1000),
+      };
+    }
+  } else if (recentCount >= MAX_PER_HOUR) {
     return {
       ok: false,
       error: 'تعداد درخواست‌های شما بیش از حد مجاز است. لطفاً یک ساعت دیگر تلاش کنید.',

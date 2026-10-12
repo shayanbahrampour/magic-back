@@ -32,8 +32,11 @@ chapter. This builds directly on the existing reading-progress integration.
 
 The client does **not** send XP. The server awards it automatically:
 
-- **Finishing a chapter** (first time): **+50 XP**.
-- **Quiz:** **+10 XP per correct answer**, plus a **+25 XP** bonus if the quiz is
+- **Finishing a chapter** (first time): **+5 XP**.
+- **Finishing a whole book** (every chapter completed, in any order; once per
+  book): **+10 XP**, on top of the chapter's +5. The progress PUT response then
+  has `bookCompleted: true`, `bookXpAwarded: 10`, and `xpAwarded` includes it.
+- **Quiz:** **+1 XP per correct answer**, plus a **+3 XP** bonus if the quiz is
   passed.
 
 Any reading-progress or quiz activity also **keeps the daily streak alive** for
@@ -44,7 +47,7 @@ a side effect of the calls below.
 
 The existing endpoint `PUT /api/user/progress/chapters/{chapterId}` is unchanged
 in how you call it, but its **response now includes** `xpAwarded` and `stats`.
-Use these to fire a "+50 XP" / streak animation the moment a chapter is completed.
+Use these to fire a "+5 XP" / streak animation the moment a chapter is completed.
 
 Response `200` (new fields shown):
 ```json
@@ -56,9 +59,9 @@ Response `200` (new fields shown):
   "completed": true,
   "completedAt": "2026-07-27T13:40:00.000Z",
   "updatedAt": "2026-07-27T13:40:00.000Z",
-  "xpAwarded": 50,
+  "xpAwarded": 5,
   "stats": {
-    "totalXp": 350,
+    "totalXp": 35,
     "currentStreak": 4,
     "longestStreak": 9,
     "lastActivityDate": "2026-07-27T20:30:00.000Z"
@@ -77,14 +80,14 @@ and an activity heatmap.
 Response `200`:
 ```json
 {
-  "totalXp": 350,
+  "totalXp": 35,
   "currentStreak": 4,
   "longestStreak": 9,
   "lastActivityDate": "2026-07-27T20:30:00.000Z",
   "activity": [
-    { "date": "2026-07-24", "xpEarned": 50 },
-    { "date": "2026-07-25", "xpEarned": 110 },
-    { "date": "2026-07-27", "xpEarned": 60 }
+    { "date": "2026-07-24", "xpEarned": 5 },
+    { "date": "2026-07-25", "xpEarned": 11 },
+    { "date": "2026-07-27", "xpEarned": 6 }
   ]
 }
 ```
@@ -179,8 +182,8 @@ Response `201`:
   "total": 2,
   "passed": true,
   "passRatio": 0.6,
-  "xpAwarded": 45,
-  "stats": { "totalXp": 395, "currentStreak": 4, "longestStreak": 9, "lastActivityDate": "2026-07-27T20:30:00.000Z" },
+  "xpAwarded": 5,
+  "stats": { "totalXp": 40, "currentStreak": 4, "longestStreak": 9, "lastActivityDate": "2026-07-27T20:30:00.000Z" },
   "results": [
     { "questionId": 101, "selectedIndex": 0, "correctIndex": 0, "isCorrect": true },
     { "questionId": 102, "selectedIndex": 1, "correctIndex": 1, "isCorrect": true }
@@ -188,7 +191,7 @@ Response `201`:
 }
 ```
 - `score` / `total` → show "2 / 2".
-- `xpAwarded` = correct×10 + (passed ? 25 : 0). Use `stats` to refresh the XP/
+- `xpAwarded` = correct×1 + (passed ? 3 : 0). Use `stats` to refresh the XP/
   streak UI (same shape as `/progress/stats`).
 - `results` gives the correct index per question for the review screen.
 - `404` `{ "error": "آزمونی برای این فصل یافت نشد." }` if the chapter has no quiz.
@@ -201,8 +204,8 @@ Response `200`:
 ```json
 {
   "attempts": [
-    { "attemptId": 55, "score": 2, "total": 2, "passed": true, "xpAwarded": 45, "completedAt": "2026-07-27T20:30:00.000Z" },
-    { "attemptId": 40, "score": 1, "total": 2, "passed": false, "xpAwarded": 10, "completedAt": "2026-07-26T09:00:00.000Z" }
+    { "attemptId": 55, "score": 2, "total": 2, "passed": true, "xpAwarded": 5, "completedAt": "2026-07-27T20:30:00.000Z" },
+    { "attemptId": 40, "score": 1, "total": 2, "passed": false, "xpAwarded": 1, "completedAt": "2026-07-26T09:00:00.000Z" }
   ]
 }
 ```
@@ -262,7 +265,7 @@ data class AttemptResponse(
 - [ ] Home/profile shows total XP, current streak (0 when lapsed), and longest streak from `GET /api/user/progress/stats`.
 - [ ] An activity heatmap/calendar renders from the `activity` array (missing days = 0).
 - [ ] A "Continue" card deep-links to `book`/`chapter` at `resumePage`; hidden when `hasProgress` is false.
-- [ ] Completing a chapter shows a "+50 XP" / streak animation using `xpAwarded` + `stats` from the progress PUT response (only when `xpAwarded > 0`).
+- [ ] Completing a chapter shows a "+5 XP" / streak animation using `xpAwarded` + `stats` from the progress PUT response (only when `xpAwarded > 0`).
 - [ ] Chapters with a quiz show a quiz entry point; the quiz screen renders questions/options from `GET /api/quiz/chapters/{id}`.
 - [ ] Submitting answers shows score, pass/fail, XP earned, and per-question correct/incorrect review from the attempt response.
 - [ ] All calls send `Authorization: Bearer <token>`; a `401` triggers re-login.
