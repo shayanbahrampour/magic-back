@@ -3,6 +3,7 @@ import fs from 'fs';
 import express from 'express';
 import { PutObjectCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
 import { getS3Client, getAppPublicUrl } from './s3';
+import { optimizeImage } from './imageOptimize';
 
 /** The parts of a multer file this module needs. */
 export interface UploadedFile {
@@ -17,13 +18,14 @@ export interface UploadedFile {
  * Uses S3/MinIO when credentials are configured (creating the bucket on first
  * use if it is missing) and falls back to the local uploads directory in dev.
  * `prefix` groups objects by kind — `uploads` for admin content, `avatars` for
- * profile pictures.
+ * profile pictures. Photos are resized and converted to WebP first.
  */
 export async function storeFile(
-  file: UploadedFile,
+  upload: UploadedFile,
   req: express.Request,
   prefix = 'uploads'
 ): Promise<string> {
+  const file = await optimizeImage(upload);
   const ext = path.extname(file.originalname) || '.jpg';
   const filename = `${prefix}/${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
   const appPublicUrl = getAppPublicUrl(req);

@@ -16,7 +16,8 @@
     "express": "^4.19.2",
     "multer": "^2.2.0",
     "prisma": "^5.22.0",
-    "shared": "*"
+    "shared": "*",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
