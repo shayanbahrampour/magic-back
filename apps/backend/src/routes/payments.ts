@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
-import { isBookFree } from '../services/entitlements';
+import { requireAuth } from '../middleware/auth';
+import { isBookFree, isBookVisible } from '../services/entitlements';
 import {
   PAYMENT_KIND_BOOK,
   PAYMENT_KIND_SUBSCRIPTION,
@@ -189,9 +190,9 @@ router.post('/book/:id', requireUser, async (req: UserAuthRequest, res) => {
   try {
     const book = await prisma.book.findUnique({
       where: { id: bookId },
-      select: { id: true, title: true, is_free: true, price_toman: true },
+      select: { id: true, title: true, is_free: true, price_toman: true, is_disabled: true, disabled_until: true },
     });
-    if (!book) return res.status(404).json({ error: 'کتاب یافت نشد.' });
+    if (!book || !isBookVisible(book)) return res.status(404).json({ error: 'کتاب یافت نشد.' });
     if (isBookFree(book)) {
       return res.status(400).json({ error: 'این کتاب رایگان است و نیازی به خرید ندارد.' });
     }
@@ -332,7 +333,7 @@ router.get('/', requireUser, async (req: UserAuthRequest, res) => {
 // `egressIp` is the address Zibal's IP allowlist actually sees; it is what must
 // be registered in the panel to clear a result-115 rejection. It is usually not
 // the IP this API's domain resolves to — see the note on `egressIp()`.
-router.get('/config/check', async (_req, res) => {
+router.get('/config/check', requireAuth, async (_req, res) => {
   const egress = await egressIp();
   res.json({
     configured: zibalConfigured(),

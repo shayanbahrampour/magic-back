@@ -4,6 +4,7 @@ import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { recordActivity, getStats, XP } from '../services/gamification';
 import { DAY_MS, tehranDayKey, tehranDayStart } from '../utils/datetime';
+import { getChapterAccess, visibleBookWhere } from '../services/entitlements';
 
 const router = Router();
 
@@ -64,8 +65,14 @@ router.put('/chapters/:chapterId', async (req: UserAuthRequest, res) => {
 
   try {
     const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
-    if (!chapter) {
+    const access = chapter ? await getChapterAccess(userId, chapterId) : null;
+    if (!chapter || !access) {
       return res.status(404).json({ error: 'فصل یافت نشد.' });
+    }
+    // Progress on a locked chapter would let anyone "finish" paid books they
+    // never opened, farm the completion XP, and spend it on real books.
+    if (!access.canRead) {
+      return res.status(403).json({ error: 'برای مطالعه این فصل باید کتاب را خریداری کنید یا اشتراک تهیه کنید.', locked: true });
     }
 
     const totalPages = await prisma.page.count({ where: { chapter_id: chapterId } });
@@ -265,7 +272,7 @@ router.get('/continue', async (req: UserAuthRequest, res) => {
   const userId = req.appUser!.id;
   try {
     const latest = await prisma.readingProgress.findFirst({
-      where: { user_id: userId, completed: false },
+      where: { user_id: userId, completed: false, chapter: { book: visibleBookWhere() } },
       orderBy: { updated_at: 'desc' },
       include: { chapter: { include: { book: true } } },
     });
@@ -308,7 +315,7 @@ router.get('/', async (req: UserAuthRequest, res) => {
 
   try {
     const progressRows = await prisma.readingProgress.findMany({
-      where: { user_id: userId },
+      where: { user_id: userId, chapter: { book: visibleBookWhere() } },
       include: { chapter: { include: { book: true } } },
     });
 

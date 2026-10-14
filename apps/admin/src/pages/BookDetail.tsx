@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, formatToman } from '../services/api';
+import { api, fileSrc, formatToman } from '../services/api';
 import type { Book, Chapter } from '../services/api';
 import {
   ArrowRight,
@@ -211,7 +211,7 @@ export const BookDetail: React.FC = () => {
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
         {book.cover_image_url ? (
           <img
-            src={book.cover_image_url}
+            src={fileSrc(book.cover_image_url)}
             alt=""
             className="h-40 w-28 shrink-0 rounded-panel border border-line object-cover"
           />

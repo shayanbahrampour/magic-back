@@ -16,6 +16,23 @@ export function isBookFree(book: { is_free: boolean; price_toman: number }): boo
 }
 
 /**
+ * Whether clients may see a book at all. An admin-disabled book is hidden until
+ * re-enabled, or — when `disabled_until` is set — until that moment passes.
+ */
+export function isBookVisible(
+  book: { is_disabled: boolean; disabled_until: Date | null },
+  now: Date = new Date()
+): boolean {
+  if (!book.is_disabled) return true;
+  return book.disabled_until !== null && book.disabled_until <= now;
+}
+
+/** Prisma filter matching the books `isBookVisible` accepts. */
+export function visibleBookWhere(now: Date = new Date()) {
+  return { OR: [{ is_disabled: false }, { disabled_until: { lte: now } }] };
+}
+
+/**
  * True when a paid book may be unlocked with earned XP. A points price only
  * counts while the book is actually paid — a free book needs no unlocking.
  */
@@ -127,7 +144,8 @@ export function canReadChapter(chapter: { is_free: boolean }, bookAccess: BookAc
 
 /**
  * Full access check for one chapter id, loading the book it belongs to.
- * Returns null when the chapter does not exist.
+ * Returns null when the chapter does not exist or its book is hidden from
+ * clients, so callers answer 404 for both.
  */
 export async function getChapterAccess(userId: number | null | undefined, chapterId: number) {
   const chapter = await prisma.chapter.findUnique({
@@ -135,10 +153,12 @@ export async function getChapterAccess(userId: number | null | undefined, chapte
     select: {
       id: true,
       is_free: true,
-      book: { select: { id: true, is_free: true, price_toman: true } },
+      book: {
+        select: { id: true, is_free: true, price_toman: true, is_disabled: true, disabled_until: true },
+      },
     },
   });
-  if (!chapter) return null;
+  if (!chapter || !isBookVisible(chapter.book)) return null;
 
   const bookAccess = await getBookAccess(userId, chapter.book);
   return {

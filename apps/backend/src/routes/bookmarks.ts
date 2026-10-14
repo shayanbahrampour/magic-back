@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
+import { getChapterAccess, visibleBookWhere } from '../services/entitlements';
 
 const router = Router();
 
@@ -48,7 +49,7 @@ router.get('/', async (req: UserAuthRequest, res) => {
   const userId = req.appUser!.id;
   try {
     const bookmarks = await prisma.bookmark.findMany({
-      where: { user_id: userId },
+      where: { user_id: userId, chapter: { book: visibleBookWhere() } },
       orderBy: { created_at: 'desc' },
       include: BOOKMARK_INCLUDE,
     });
@@ -99,9 +100,12 @@ router.post('/', async (req: UserAuthRequest, res) => {
   }
 
   try {
-    const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
-    if (!chapter) {
+    const access = await getChapterAccess(userId, chapterId);
+    if (!access) {
       return res.status(404).json({ error: 'فصل یافت نشد.' });
+    }
+    if (!access.canRead) {
+      return res.status(403).json({ error: 'برای مطالعه این فصل باید کتاب را خریداری کنید یا اشتراک تهیه کنید.', locked: true });
     }
 
     const totalPages = await prisma.page.count({ where: { chapter_id: chapterId } });

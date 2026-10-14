@@ -4,17 +4,41 @@ import { Readable } from 'stream';
 import path from 'path';
 import fs from 'fs';
 import { getS3Client } from '../utils/s3';
+import { requireFileReader } from '../middleware/reader';
 
 const router = Router();
 
+// A storage key is a relative path of plain segments. Anything that could walk
+// out of the storage root (`..`, absolute paths, backslashes, NUL) is refused.
+function isSafeKey(key: string): boolean {
+  if (!key || key.includes('\0') || key.includes('\\') || path.isAbsolute(key)) return false;
+  return key.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+// Serves a local file only if it really lives inside `root`.
+function resolveInside(root: string, key: string): string | null {
+  const resolvedRoot = path.resolve(root);
+  const target = path.resolve(resolvedRoot, key);
+  return target.startsWith(resolvedRoot + path.sep) ? target : null;
+}
+
 // GET /api/files/* or /files/*
-// Streams files from MinIO / S3 (or local filesystem fallback) to the client
-router.get('/*', async (req: Request, res: Response) => {
+// Streams files from MinIO / S3 (or local filesystem fallback) to the client.
+// Signed-in callers only (header or `?token=`): page images are book content.
+router.get('/*', requireFileReader, async (req: Request, res: Response) => {
   try {
     // Extract key from the wildcard path
-    let key = decodeURIComponent(req.path.replace(/^\/+/, ''));
+    let key: string;
+    try {
+      key = decodeURIComponent(req.path.replace(/^\/+/, ''));
+    } catch {
+      return res.status(400).json({ error: 'مسیر فایل نامعتبر است' });
+    }
     if (!key) {
       return res.status(400).json({ error: 'نام یا مسیر فایل مشخص نشده است' });
+    }
+    if (!isSafeKey(key)) {
+      return res.status(400).json({ error: 'مسیر فایل نامعتبر است' });
     }
 
     const s3Info = getS3Client();
@@ -32,14 +56,6 @@ router.get('/*', async (req: Request, res: Response) => {
         });
       }
 
-      if (key.includes('/')) {
-        const parts = key.split('/');
-        const possibleBucket = parts[0];
-        const possibleKey = parts.slice(1).join('/');
-        if (possibleBucket !== s3Info.bucket) {
-          attempts.push({ bucket: possibleBucket, key: possibleKey });
-        }
-      }
 
       for (const attempt of attempts) {
         try {
@@ -80,7 +96,8 @@ router.get('/*', async (req: Request, res: Response) => {
             res.setHeader('Last-Modified', response.LastModified.toUTCString());
           }
 
-          res.setHeader('Cache-Control', 'public, max-age=31536000');
+          // Private: the response is per-user gated, so shared caches must not keep it.
+          res.setHeader('Cache-Control', 'private, max-age=86400');
           res.setHeader('Accept-Ranges', 'bytes');
 
           if (response.$metadata?.httpStatusCode === 206 && response.ContentRange) {
@@ -125,14 +142,14 @@ router.get('/*', async (req: Request, res: Response) => {
 
     // Local filesystem fallback
     const localPaths = [
-      path.join(__dirname, '../../../admin/public', key),
-      path.join(__dirname, '../../admin/dist', key),
-      path.join(__dirname, '../../../admin/public/uploads', path.basename(key)),
-      path.join(__dirname, '../../admin/dist/uploads', path.basename(key)),
+      resolveInside(path.join(__dirname, '../../../admin/public'), key),
+      resolveInside(path.join(__dirname, '../../admin/dist'), key),
+      resolveInside(path.join(__dirname, '../../../admin/public/uploads'), path.basename(key)),
+      resolveInside(path.join(__dirname, '../../admin/dist/uploads'), path.basename(key)),
     ];
 
     for (const localPath of localPaths) {
-      if (fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
+      if (localPath && fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
         return res.sendFile(path.resolve(localPath));
       }
     }

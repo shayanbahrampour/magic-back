@@ -16,6 +16,7 @@ import subscriptionsRouter from './routes/subscriptions';
 import paymentsRouter from './routes/payments';
 import uploadRouter from './routes/upload';
 import filesRouter from './routes/files';
+import salesRouter from './routes/sales';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use('/api/quiz', quizRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/sales', salesRouter);
 app.use('/api/files', filesRouter);
 app.use('/files', filesRouter);
 app.use('/api/categories', categoriesRouter);

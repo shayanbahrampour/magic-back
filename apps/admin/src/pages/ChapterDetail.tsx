@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, fileSrc } from '../services/api';
 import type { Book, Chapter, Page } from '../services/api';
 import {
   ArrowRight,
@@ -239,7 +239,7 @@ export const ChapterDetail: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {imageUrls.map((url, idx) => (
                 <div key={url} className="group relative overflow-hidden rounded-control border border-line bg-raised">
-                  <img src={url} alt={`تصویر ${idx + 1}`} className="h-24 w-full object-cover" />
+                  <img src={fileSrc(url)} alt={`تصویر ${idx + 1}`} className="h-24 w-full object-cover" />
                   <button type="button" onClick={() => handleRemoveImageUrl(url)} aria-label="حذف این تصویر" className="absolute top-1.5 end-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-surface/95 text-critical"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}

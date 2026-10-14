@@ -46,7 +46,8 @@ export async function storeFile(
     Key: filename,
     Body: file.buffer,
     ContentType: file.mimetype,
-    ACL: 'public-read' as const,
+    // Private: files are served through the authenticated /api/files proxy, so
+    // the bucket must not hand them out to anyone with the object URL.
   };
 
   try {

@@ -2,16 +2,11 @@ import { Router } from 'express';
 import { signToken } from '../utils/jwt';
 import { discardLatestOtp, issueOtp, verifyOtp } from '../services/otp';
 import { SmsError, sendOtpSms } from '../services/sms';
+import { isAllowedAdmin } from '../utils/admins';
 
 const router = Router();
 
 const IRAN_PHONE_REGEX = /^09\d{9}$/;
-
-function isAllowedAdmin(phone: string): boolean {
-  const envPhones = process.env.ADMIN_PHONES || '09136441844,09135709925';
-  const allowedList = envPhones.split(',').map((p) => p.trim()).filter(Boolean);
-  return allowedList.includes(phone);
-}
 
 // POST /api/auth/send-otp
 router.post('/send-otp', async (req, res) => {

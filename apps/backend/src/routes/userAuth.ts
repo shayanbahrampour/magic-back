@@ -228,7 +228,7 @@ router.patch('/me', requireUser, async (req: UserAuthRequest, res) => {
   if (avatarUrl !== undefined) {
     if (avatarUrl === null || avatarUrl === '') {
       data.avatar_url = null;
-    } else if (typeof avatarUrl === 'string') {
+    } else if (typeof avatarUrl === 'string' && /^(https?:\/\/|\/api\/files\/)/i.test(avatarUrl.trim())) {
       data.avatar_url = avatarUrl.trim();
     } else {
       return res.status(400).json({ error: 'آدرس تصویر معتبر نیست.' });

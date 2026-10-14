@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatToman, toPersianDigits } from '../services/api';
+import { api, daysUntil, fileSrc, formatJalali, formatToman, toPersianDigits } from '../services/api';
 import type { Book, Category } from '../services/api';
 import {
   Plus,
@@ -16,6 +16,8 @@ import {
   Lock,
   Unlock,
   Award,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   Badge,
@@ -59,6 +61,11 @@ export const Books: React.FC = () => {
   // Points purchasing: the toggle mirrors "points_price > 0" on the server.
   const [pointsEnabled, setPointsEnabled] = useState(false);
   const [pointsPrice, setPointsPrice] = useState('');
+  // Visibility: a hidden book disappears from the app. `hideDays` blank means
+  // hidden until an admin shows it again; a number makes the hide expire.
+  const [isDisabled, setIsDisabled] = useState(false);
+  const [hideDays, setHideDays] = useState('');
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState('');
@@ -93,6 +100,9 @@ export const Books: React.FC = () => {
     setPriceToman(book.price_toman ? String(book.price_toman) : '');
     setPointsEnabled(Boolean(book.points_price));
     setPointsPrice(book.points_price ? String(book.points_price) : '');
+    // Only an active hide is worth showing; one that already expired reads as visible.
+    setIsDisabled(Boolean(book.is_hidden));
+    setHideDays(book.is_hidden && book.disabled_until ? String(Math.max(1, daysUntil(book.disabled_until))) : '');
     setShowForm(true);
   };
 
@@ -110,6 +120,8 @@ export const Books: React.FC = () => {
     setPriceToman('');
     setPointsEnabled(false);
     setPointsPrice('');
+    setIsDisabled(false);
+    setHideDays('');
     setError('');
   };
 
@@ -161,6 +173,23 @@ export const Books: React.FC = () => {
       return;
     }
 
+    const days = hideDays === '' ? null : Number(hideDays);
+    if (isDisabled && days !== null && (!Number.isInteger(days) || days <= 0)) {
+      setError('تعداد روزهای پنهان بودن باید یک عدد صحیح مثبت باشد');
+      return;
+    }
+    // Keep the existing end date when the admin didn't touch the day count, so
+    // re-saving a book doesn't keep pushing its hide further out.
+    const existingDays =
+      editingBook?.is_hidden && editingBook.disabled_until
+        ? String(Math.max(1, daysUntil(editingBook.disabled_until)))
+        : '';
+    const disabledUntil = !isDisabled || days === null
+      ? null
+      : hideDays === existingDays && editingBook?.disabled_until
+        ? editingBook.disabled_until
+        : new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
     const payload = {
       title,
       author,
@@ -171,6 +200,8 @@ export const Books: React.FC = () => {
       is_free: isFree,
       price_toman: price,
       points_price: points,
+      is_disabled: isDisabled,
+      disabled_until: disabledUntil,
     };
 
     setSaving(true);
@@ -188,6 +219,23 @@ export const Books: React.FC = () => {
       setError(err.message || 'خطا در ذخیره‌سازی کتاب');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // One-click hide/show from the list. Hiding this way has no end date.
+  const handleToggleVisibility = async (book: Book) => {
+    setError('');
+    setSuccess('');
+    setTogglingId(book.id);
+    try {
+      const hide = !book.is_hidden;
+      await api.updateBook(book.id, { is_disabled: hide, disabled_until: null });
+      setSuccess(hide ? `«${book.title}» از اپلیکیشن پنهان شد` : `«${book.title}» دوباره در اپلیکیشن نمایش داده می‌شود`);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'خطا در تغییر وضعیت نمایش کتاب');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -274,7 +322,7 @@ export const Books: React.FC = () => {
                 {coverImageUrl ? (
                   <div className="relative shrink-0">
                     <img
-                      src={coverImageUrl}
+                      src={fileSrc(coverImageUrl)}
                       alt="پیش‌نمایش جلد"
                       className="h-28 w-20 rounded-control border border-line object-cover"
                     />
@@ -463,6 +511,57 @@ export const Books: React.FC = () => {
               )}
             </div>
 
+            {/* Visibility */}
+            <div className="space-y-4 rounded-control border border-line bg-raised/50 p-4">
+              <Field
+                label="نمایش در اپلیکیشن"
+                hint="کتاب پنهان برای کاربران نه در فهرست دیده می‌شود و نه قابل مطالعه یا خرید است. اطلاعات، خریدها و پیشرفت کاربران حفظ می‌شود."
+              >
+                <SegmentedControl
+                  ariaLabel="وضعیت نمایش کتاب"
+                  value={isDisabled ? 'hidden' : 'visible'}
+                  onChange={(next) => setIsDisabled(next === 'hidden')}
+                  options={[
+                    {
+                      value: 'visible',
+                      label: (
+                        <>
+                          <Eye className="h-3.5 w-3.5" /> نمایش
+                        </>
+                      ),
+                    },
+                    {
+                      value: 'hidden',
+                      label: (
+                        <>
+                          <EyeOff className="h-3.5 w-3.5" /> پنهان
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+              </Field>
+
+              {isDisabled && (
+                <Field
+                  label="مدت پنهان بودن (روز)"
+                  htmlFor="book-hide-days"
+                  hint="خالی بگذارید تا کتاب تا زمانی که دوباره نمایش را فعال کنید پنهان بماند. با تعیین تعداد روز، کتاب پس از آن خودکار نمایش داده می‌شود."
+                >
+                  <Input
+                    id="book-hide-days"
+                    type="number"
+                    min={1}
+                    value={hideDays}
+                    onChange={(e) => setHideDays(e.target.value)}
+                    placeholder="مثلاً ۳۰"
+                    className="num"
+                    dir="ltr"
+                  />
+                </Field>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
               <Button type="button" onClick={handleCancel}>
                 انصراف
@@ -510,7 +609,7 @@ export const Books: React.FC = () => {
                     <div className="flex items-center gap-3">
                       {book.cover_image_url ? (
                         <img
-                          src={book.cover_image_url}
+                          src={fileSrc(book.cover_image_url)}
                           alt=""
                           className="h-14 w-10 shrink-0 rounded-[6px] border border-line object-cover"
                         />
@@ -520,7 +619,17 @@ export const Books: React.FC = () => {
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ink">{book.title}</p>
+                        <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-ink">
+                          {book.title}
+                          {book.is_hidden && (
+                            <Badge tone="critical">
+                              <EyeOff className="h-3 w-3" />
+                              {book.disabled_until
+                                ? `پنهان تا ${formatJalali(book.disabled_until)}`
+                                : 'پنهان'}
+                            </Badge>
+                          )}
+                        </p>
                         <p className="max-w-xs truncate text-xs text-muted">
                           {book.short_description}
                         </p>
@@ -569,6 +678,13 @@ export const Books: React.FC = () => {
                         ویرایش محتوا
                         <ChevronLeft className="h-4 w-4" />
                       </Link>
+                      <IconButton
+                        label={book.is_hidden ? 'نمایش در اپلیکیشن' : 'پنهان کردن از اپلیکیشن'}
+                        onClick={() => handleToggleVisibility(book)}
+                        disabled={togglingId === book.id}
+                      >
+                        {book.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      </IconButton>
                       <IconButton label="ویرایش کتاب" onClick={() => handleEditClick(book)}>
                         <Edit2 className="h-4 w-4" />
                       </IconButton>

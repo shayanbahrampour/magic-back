@@ -6,6 +6,7 @@ Shared direction: original, full-bleed square cover art inspired by the supplied
 
 | Book ID | File | Subject |
 |---:|---|---|
+| 25 | invincible-comite.png | Human silhouette with five luminous body markers and a rising arc, for biological aging and vitality |
 | 20 | impossible-factory-dean.png | Black reconnaissance jet emerging from a geometric factory doorway with speed arcs |
 | 19 | 19-strange-glow.png | Luminous atomic orb and handheld radiation detector |
 | 18 | 18-let-my-people-go-surfing.png | Surfer on a rugged coastal mountain path |

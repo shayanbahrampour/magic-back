@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   api,
   daysUntil,
+  fileSrc,
   formatJalali,
   formatToman,
   toPersianDigits,
@@ -293,7 +294,7 @@ export const Users: React.FC = () => {
                         <div className="flex items-center gap-3">
                           {user.avatarUrl ? (
                             <img
-                              src={user.avatarUrl}
+                              src={fileSrc(user.avatarUrl)}
                               alt=""
                               className="h-9 w-9 shrink-0 rounded-full border border-line object-cover"
                             />
@@ -547,7 +548,7 @@ function PurchaseHistory({ records }: { records: BookPurchaseRecord[] }) {
         <li key={purchase.id} className="flex items-center gap-3 px-4 py-3">
           {purchase.coverImageUrl ? (
             <img
-              src={purchase.coverImageUrl}
+              src={fileSrc(purchase.coverImageUrl)}
               alt=""
               className="h-11 w-8 shrink-0 rounded-[5px] border border-line object-cover"
             />

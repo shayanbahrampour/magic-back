@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
-import { optionalUser } from '../middleware/optionalUser';
-import { UserAuthRequest } from '../middleware/userAuth';
+import { requireReader, ReaderRequest } from '../middleware/reader';
 import { normalizeFileUrl } from '../utils/s3';
 import { getChapterAccess } from '../services/entitlements';
 
@@ -11,15 +10,17 @@ const router = Router();
 // CLIENT: GET /chapters/:id/pages (Get pages sequentially)
 // This is the endpoint that actually serves paid content, so it is the one that
 // must enforce entitlements — the lock states elsewhere are presentation only.
-router.get('/:id/pages', optionalUser, async (req: UserAuthRequest, res) => {
+// Signed-in callers only; anonymous requests never reach a page, free or not.
+router.get('/:id/pages', requireReader, async (req: ReaderRequest, res) => {
   const { id } = req.params;
   const userId = req.appUser?.id ?? null;
   try {
-    const access = await getChapterAccess(userId, Number(id));
-    if (!access) {
-      return res.status(404).json({ error: 'Chapter not found' });
+    // Admins edit every chapter, so entitlements and hiding don't apply to them.
+    const access = req.isAdmin ? null : await getChapterAccess(userId, Number(id));
+    if (!req.isAdmin && !access) {
+      return res.status(404).json({ error: 'فصل یافت نشد یا در حال حاضر در دسترس نیست.' });
     }
-    if (!access.canRead) {
+    if (access && !access.canRead) {
       return res.status(403).json({
         error: 'برای مطالعه این فصل باید کتاب را خریداری کنید یا اشتراک تهیه کنید.',
         locked: true,
@@ -78,7 +79,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       where: { id: Number(id) },
     });
     if (!chapter) {
-      return res.status(404).json({ error: 'Chapter not found' });
+      return res.status(404).json({ error: 'فصل یافت نشد یا در حال حاضر در دسترس نیست.' });
     }
     res.json(chapter);
   } catch (error) {

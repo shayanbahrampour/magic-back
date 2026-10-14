@@ -8,6 +8,7 @@ import { BookDetail } from './pages/BookDetail';
 import { ChapterDetail } from './pages/ChapterDetail';
 import { Subscriptions } from './pages/Subscriptions';
 import { Users } from './pages/Users';
+import { Sales } from './pages/Sales';
 import { Login } from './pages/Login';
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
           <Route path="/books/:bookId/chapters/:chapterId" element={<ChapterDetail />} />
           <Route path="/users" element={<Users />} />
           <Route path="/subscriptions" element={<Subscriptions />} />
+          <Route path="/sales" element={<Sales />} />
         </Routes>
       </Layout>
     </BrowserRouter>

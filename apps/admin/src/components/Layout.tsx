@@ -7,6 +7,7 @@ import {
   BookMarked,
   CreditCard,
   Users,
+  BarChart3,
   LogOut,
   Menu,
   X,
@@ -24,6 +25,7 @@ const MENU = [
   { path: '/books', label: 'کتاب‌ها', icon: BookOpen },
   { path: '/users', label: 'کاربران', icon: Users },
   { path: '/subscriptions', label: 'اشتراک‌ها', icon: CreditCard },
+  { path: '/sales', label: 'گزارش فروش', icon: BarChart3 },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {

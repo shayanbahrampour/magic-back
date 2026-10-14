@@ -72,6 +72,103 @@ export interface Book {
   points_price: number;
   /** Server-derived: true when the book is paid and has a points price. */
   can_buy_with_points?: boolean;
+  /** Admin switch hiding the book from the app. */
+  is_disabled?: boolean;
+  /** ISO instant the hide ends on its own; null = until re-enabled by hand. */
+  disabled_until?: string | null;
+  /** Server-derived: true while clients cannot see the book right now. */
+  is_hidden?: boolean;
+}
+
+export type BookInput = {
+  title?: string;
+  author?: string;
+  short_description?: string;
+  full_description?: string;
+  cover_image_url?: string | null;
+  category_ids?: number[];
+  is_free?: boolean;
+  price_toman?: number;
+  points_price?: number;
+  is_disabled?: boolean;
+  disabled_until?: string | null;
+};
+
+/**
+ * Files under /api/files require a signed-in caller. <img> tags can't send an
+ * Authorization header, so the admin token rides along as `?token=` — only at
+ * render time, never in URLs that get saved back to the server.
+ */
+export function fileSrc(url?: string | null): string {
+  if (!url) return '';
+  const token = localStorage.getItem('admin_token');
+  if (!token || !url.includes('/api/files/')) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
+export type SalesKind = 'all' | 'book' | 'subscription';
+export type SalesSource = 'all' | 'gateway' | 'points';
+export type SalesStatus = 'all' | 'verified' | 'paid' | 'pending' | 'failed';
+export type SalesGroupBy = 'day' | 'week' | 'month';
+
+export interface SalesFilters {
+  from?: string;
+  to?: string;
+  kind?: SalesKind;
+  source?: SalesSource;
+  status?: SalesStatus;
+  groupBy?: SalesGroupBy;
+  bookId?: number;
+  planId?: number;
+  categoryId?: number;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SalesTransaction {
+  id: string;
+  source: 'gateway' | 'points';
+  kind: 'book' | 'subscription';
+  status: string;
+  amountToman: number;
+  pointsSpent: number;
+  createdAt: string;
+  user: { id: number; phone: string; name: string };
+  book: { id: number; title: string } | null;
+  plan: { id: number; title: string } | null;
+  trackId: string | null;
+  refNumber: string | null;
+}
+
+export interface SalesReport {
+  summary: {
+    revenueToman: number;
+    orders: number;
+    averageOrderToman: number;
+    uniqueBuyers: number;
+    bookRevenueToman: number;
+    bookOrders: number;
+    subscriptionRevenueToman: number;
+    subscriptionOrders: number;
+    pointsPurchases: number;
+    pointsSpent: number;
+    conversionRate: number | null;
+  };
+  byStatus: { status: string; count: number; amountToman: number }[];
+  timeseries: {
+    period: string;
+    revenueToman: number;
+    bookRevenueToman: number;
+    subscriptionRevenueToman: number;
+    orders: number;
+    pointsPurchases: number;
+    pointsSpent: number;
+  }[];
+  byBook: { bookId: number; title: string; revenueToman: number; orders: number; pointsPurchases: number; pointsSpent: number }[];
+  byCategory: { categoryId: number; name: string; revenueToman: number; orders: number; pointsPurchases: number }[];
+  byPlan: { planId: number | null; title: string; revenueToman: number; orders: number }[];
+  transactions: { total: number; page: number; pageSize: number; rows: SalesTransaction[] };
 }
 
 export interface Chapter {
@@ -316,14 +413,14 @@ export const api = {
     return normalizeBook(book);
   },
   getBookChapters: (bookId: number) => request<Chapter[]>(`/books/${bookId}/chapters`),
-  createBook: async (data: { title: string; author: string; short_description: string; full_description: string; cover_image_url?: string | null; category_ids: number[]; is_free?: boolean; price_toman?: number; points_price?: number }) => {
+  createBook: async (data: BookInput & { title: string; author: string; category_ids: number[] }) => {
     const book = await request<Book>('/books', {
       method: 'POST',
       body: JSON.stringify(data),
     });
     return normalizeBook(book);
   },
-  updateBook: async (id: number, data: { title?: string; author?: string; short_description?: string; full_description?: string; cover_image_url?: string | null; category_ids?: number[]; is_free?: boolean; price_toman?: number; points_price?: number }) => {
+  updateBook: async (id: number, data: BookInput) => {
     const book = await request<Book>(`/books/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -334,6 +431,16 @@ export const api = {
     request<{ message: string }>(`/books/${id}`, {
       method: 'DELETE',
     }),
+
+  // Sales report
+  getSales: (filters: SalesFilters) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== '' && value !== null) params.set(key, String(value));
+    }
+    const query = params.toString();
+    return request<SalesReport>(`/sales${query ? `?${query}` : ''}`);
+  },
 
   // Chapters CRUD
   getChapters: (bookId?: number) => {

@@ -3,6 +3,9 @@ import prisma from '../db';
 import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { requireAuth } from '../middleware/auth';
 import { recordActivity, XP } from '../services/gamification';
+import { getChapterAccess } from '../services/entitlements';
+
+const LOCKED_ERROR = 'برای شرکت در آزمون این فصل باید کتاب را خریداری کنید یا اشتراک تهیه کنید.';
 
 const router = Router();
 
@@ -31,6 +34,10 @@ router.get('/chapters/:chapterId', requireUser, async (req: UserAuthRequest, res
   }
 
   try {
+    const access = await getChapterAccess(userId, chapterId);
+    if (!access) return res.status(404).json({ error: 'فصل یافت نشد.' });
+    if (!access.canRead) return res.status(403).json({ error: LOCKED_ERROR, locked: true });
+
     const quiz = await prisma.quiz.findUnique({
       where: { chapter_id: chapterId },
       include: { questions: { orderBy: { question_order: 'asc' } } },
@@ -87,6 +94,10 @@ router.post('/chapters/:chapterId/attempts', requireUser, async (req: UserAuthRe
   }
 
   try {
+    const access = await getChapterAccess(userId, chapterId);
+    if (!access) return res.status(404).json({ error: 'فصل یافت نشد.' });
+    if (!access.canRead) return res.status(403).json({ error: LOCKED_ERROR, locked: true });
+
     const quiz = await prisma.quiz.findUnique({
       where: { chapter_id: chapterId },
       include: { questions: true },
@@ -116,7 +127,15 @@ router.post('/chapters/:chapterId/attempts', requireUser, async (req: UserAuthRe
     const total = quiz.questions.length;
     const score = gradedAnswers.filter((a) => a.isCorrect).length;
     const passed = score / total >= quiz.pass_ratio;
-    const xpAwarded = score * XP.QUIZ_PER_CORRECT + (passed ? XP.QUIZ_PASS_BONUS : 0);
+    const xpEarned = score * XP.QUIZ_PER_CORRECT + (passed ? XP.QUIZ_PASS_BONUS : 0);
+    // Each attempt reveals the correct answers, so paying out every attempt
+    // would let a retake farm unlimited XP (spendable on books). A quiz pays
+    // at most its best score in total: a retake earns only the improvement.
+    const previous = await prisma.quizAttempt.aggregate({
+      where: { user_id: userId, quiz_id: quiz.id },
+      _sum: { xp_awarded: true },
+    });
+    const xpAwarded = Math.max(0, xpEarned - (previous._sum.xp_awarded ?? 0));
 
     // Persist the attempt and its answers atomically.
     const attempt = await prisma.quizAttempt.create({

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
+import { isAllowedAdmin } from '../utils/admins';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -22,7 +23,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     return res.status(401).json({ error: 'نشست شما منقضی شده است. لطفا مجددا وارد شوید.' });
   }
 
-  if (payload.role !== 'ADMIN') {
+  if (payload.role !== 'ADMIN' || !isAllowedAdmin(payload.phone)) {
     return res.status(403).json({ error: 'دسترسی غیرمجاز. این بخش مخصوص مدیریت است.' });
   }
 

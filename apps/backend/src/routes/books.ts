@@ -1,11 +1,18 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
-import { optionalUser } from '../middleware/optionalUser';
-import { UserAuthRequest } from '../middleware/userAuth';
+import { requireReader, ReaderRequest } from '../middleware/reader';
 import { normalizeFileUrl } from '../utils/s3';
-import { canBuyWithPoints, canReadChapter, getBookAccess, getBookAccessMap, isBookFree } from '../services/entitlements';
-import { requireUser } from '../middleware/userAuth';
+import {
+  canBuyWithPoints,
+  canReadChapter,
+  getBookAccess,
+  getBookAccessMap,
+  isBookFree,
+  isBookVisible,
+  visibleBookWhere,
+} from '../services/entitlements';
+import { requireUser, UserAuthRequest } from '../middleware/userAuth';
 import { getStats, spendXp } from '../services/gamification';
 
 const router = Router();
@@ -23,22 +30,38 @@ function normalizePrice(value: unknown): number | null {
 // 0 meaning "points cannot buy this book".
 const normalizePointsPrice = normalizePrice;
 
-// CLIENT: GET /books (with optional categoryId filter)
-// Public, but personalised: `locked` reflects the caller's own entitlements when
-// they send a token.
-router.get('/', optionalUser, async (req: UserAuthRequest, res) => {
+// Reads `is_disabled` / `disabled_until` from an admin request body. Returns an
+// error message for unusable input. A `disabled_until` in the past is refused —
+// it would save a book as "disabled" that is already visible again.
+function parseDisabled(body: any): { data: { is_disabled?: boolean; disabled_until?: Date | null } } | { error: string } {
+  const data: { is_disabled?: boolean; disabled_until?: Date | null } = {};
+  if (body.is_disabled !== undefined) data.is_disabled = Boolean(body.is_disabled);
+  if (body.disabled_until !== undefined) {
+    if (body.disabled_until === null || body.disabled_until === '') {
+      data.disabled_until = null;
+    } else {
+      const until = new Date(body.disabled_until);
+      if (Number.isNaN(until.getTime())) return { error: 'تاریخ پایان غیرفعال‌سازی معتبر نیست.' };
+      if (until <= new Date()) return { error: 'تاریخ پایان غیرفعال‌سازی باید در آینده باشد.' };
+      data.disabled_until = until;
+    }
+  }
+  // Re-enabling clears any end date so a later disable starts clean.
+  if (data.is_disabled === false) data.disabled_until = null;
+  return { data };
+}
+
+// CLIENT & ADMIN: GET /books (with optional categoryId filter)
+// Signed-in callers only. `locked` reflects the caller's own entitlements.
+// Disabled books are left out for app users; admins see every book.
+router.get('/', requireReader, async (req: ReaderRequest, res) => {
   const { categoryId } = req.query;
   const userId = req.appUser?.id ?? null;
   try {
-    const filter = categoryId
-      ? {
-          categories: {
-            some: {
-              id: Number(categoryId),
-            },
-          },
-        }
-      : {};
+    const filter = {
+      ...(categoryId ? { categories: { some: { id: Number(categoryId) } } } : {}),
+      ...(req.isAdmin ? {} : visibleBookWhere()),
+    };
 
     const books = await prisma.book.findMany({
       where: filter,
@@ -59,6 +82,7 @@ router.get('/', optionalUser, async (req: UserAuthRequest, res) => {
         has_access: access.hasAccess,
         access_reason: access.reason,
         locked: !access.hasAccess,
+        is_hidden: !isBookVisible(b),
       };
     });
     res.json(normalized);
@@ -69,7 +93,7 @@ router.get('/', optionalUser, async (req: UserAuthRequest, res) => {
 });
 
 // CLIENT & ADMIN: GET /books/:id
-router.get('/:id', optionalUser, async (req: UserAuthRequest, res) => {
+router.get('/:id', requireReader, async (req: ReaderRequest, res) => {
   const { id } = req.params;
   const userId = req.appUser?.id ?? null;
   try {
@@ -79,8 +103,8 @@ router.get('/:id', optionalUser, async (req: UserAuthRequest, res) => {
         categories: true,
       },
     });
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
+    if (!book || (!req.isAdmin && !isBookVisible(book))) {
+      return res.status(404).json({ error: 'کتاب یافت نشد یا در حال حاضر در دسترس نیست.' });
     }
     const access = await getBookAccess(userId, book);
     const normalized = {
@@ -91,6 +115,7 @@ router.get('/:id', optionalUser, async (req: UserAuthRequest, res) => {
       has_access: access.hasAccess,
       access_reason: access.reason,
       locked: !access.hasAccess,
+      is_hidden: !isBookVisible(book),
     };
     res.json(normalized);
   } catch (error) {
@@ -100,19 +125,19 @@ router.get('/:id', optionalUser, async (req: UserAuthRequest, res) => {
 });
 
 // CLIENT: GET /books/:id/chapters
-// The table of contents is always readable — it's the chapter *pages* that are
-// gated. Each row carries its own `locked` flag so the app can show which
+// The table of contents is readable by any signed-in caller — it's the chapter
+// *pages* that are entitlement-gated. Each row carries its own `locked` flag so the app can show which
 // chapters are free previews.
-router.get('/:id/chapters', optionalUser, async (req: UserAuthRequest, res) => {
+router.get('/:id/chapters', requireReader, async (req: ReaderRequest, res) => {
   const { id } = req.params;
   const userId = req.appUser?.id ?? null;
   try {
     const book = await prisma.book.findUnique({
       where: { id: Number(id) },
-      select: { id: true, is_free: true, price_toman: true },
+      select: { id: true, is_free: true, price_toman: true, is_disabled: true, disabled_until: true },
     });
-    if (!book) {
-      return res.status(404).json({ error: 'Book not found' });
+    if (!book || (!req.isAdmin && !isBookVisible(book))) {
+      return res.status(404).json({ error: 'کتاب یافت نشد یا در حال حاضر در دسترس نیست.' });
     }
 
     const chapters = await prisma.chapter.findMany({
@@ -147,9 +172,17 @@ router.post('/:id/purchase-with-points', requireUser, async (req: UserAuthReques
   try {
     const book = await prisma.book.findUnique({
       where: { id: bookId },
-      select: { id: true, title: true, is_free: true, price_toman: true, points_price: true },
+      select: {
+        id: true,
+        title: true,
+        is_free: true,
+        price_toman: true,
+        points_price: true,
+        is_disabled: true,
+        disabled_until: true,
+      },
     });
-    if (!book) {
+    if (!book || !isBookVisible(book)) {
       return res.status(404).json({ error: 'کتاب یافت نشد.' });
     }
 
@@ -234,6 +267,10 @@ router.post('/', requireAuth, async (req, res) => {
   if (!free && price <= 0) {
     return res.status(400).json({ error: 'برای کتاب غیررایگان باید قیمتی بزرگ‌تر از صفر تعیین شود.' });
   }
+  const disabled = parseDisabled(req.body);
+  if ('error' in disabled) {
+    return res.status(400).json({ error: disabled.error });
+  }
   try {
     const cleanCoverUrl = normalizeFileUrl(cover_image_url, req);
     const newBook = await prisma.book.create({
@@ -247,6 +284,7 @@ router.post('/', requireAuth, async (req, res) => {
         price_toman: price,
         // A free book can never be points-purchasable, so don't store a stale cost.
         points_price: free ? 0 : pointsPrice,
+        ...disabled.data,
         categories: {
           connect: category_ids.map((cid: number) => ({ id: Number(cid) })),
         },
@@ -298,6 +336,11 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (is_free !== undefined) {
       data.is_free = Boolean(is_free);
     }
+    const disabled = parseDisabled(req.body);
+    if ('error' in disabled) {
+      return res.status(400).json({ error: disabled.error });
+    }
+    Object.assign(data, disabled.data);
 
     // Validate the *resulting* state, since either field may be absent from a
     // partial update.
@@ -306,7 +349,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       select: { is_free: true, price_toman: true },
     });
     if (!existing) {
-      return res.status(404).json({ error: 'Book not found' });
+      return res.status(404).json({ error: 'کتاب یافت نشد یا در حال حاضر در دسترس نیست.' });
     }
     const nextFree = data.is_free ?? existing.is_free;
     const nextPrice = data.price_toman ?? existing.price_toman;

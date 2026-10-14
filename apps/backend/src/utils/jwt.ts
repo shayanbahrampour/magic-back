@@ -1,6 +1,17 @@
 import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'magicbook-admin-super-secret-key-2026';
+// The old hard-coded fallback was public in the repo, so anyone could mint an
+// ADMIN token with it. Production must provide its own secret; dev keeps a
+// throwaway default so a fresh checkout still boots.
+const JWT_SECRET = (() => {
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret.length >= 16 && secret !== 'change-me') return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set to a strong value (16+ chars) in production.');
+  }
+  console.warn('[JWT] JWT_SECRET is missing or weak — using an insecure development secret.');
+  return 'magicbook-dev-only-secret';
+})();
 
 export function signToken(payload: object, expiresInSeconds = 86400 * 7): string {
   const header = { alg: 'HS256', typ: 'JWT' };
@@ -31,7 +42,12 @@ export function verifyToken(token: string): any | null {
       .update(data)
       .digest('base64url');
 
-    if (signature !== expectedSignature) return null;
+    const given = Buffer.from(signature);
+    const expected = Buffer.from(expectedSignature);
+    if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return null;
+
+    const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8'));
+    if (header?.alg !== 'HS256') return null;
 
     const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
     const now = Math.floor(Date.now() / 1000);

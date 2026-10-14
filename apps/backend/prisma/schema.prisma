@@ -71,6 +71,11 @@ model Book {
   // points cannot be used for it — one field rather than a flag plus an amount,
   // so the two can never disagree. Only meaningful while `is_free` is false.
   points_price      Int            @default(0)
+  // Hidden from clients while set. `disabled_until` makes the hide temporary:
+  // once that moment passes the book is visible again without an admin edit.
+  // Null with `is_disabled` true means hidden until re-enabled by hand.
+  is_disabled       Boolean        @default(false)
+  disabled_until    DateTime?
   categories        Category[]
   chapters          Chapter[]
   purchases         BookPurchase[]

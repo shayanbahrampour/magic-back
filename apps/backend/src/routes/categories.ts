@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { requireAuth } from '../middleware/auth';
+import { requireReader } from '../middleware/reader';
 
 const router = Router();
 
-// CLIENT: GET /categories
-router.get('/', async (req, res) => {
+// CLIENT & ADMIN: GET /categories — signed-in callers only.
+router.get('/', requireReader, async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
       orderBy: { name: 'asc' },
