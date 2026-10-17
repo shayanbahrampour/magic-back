@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { getS3Client } from '../utils/s3';
 import { requireFileReader } from '../middleware/reader';
+import { getVariant, isResizableKey, parseVariantWidth } from '../utils/imageVariants';
 
 const router = Router();
 
@@ -22,7 +23,48 @@ function resolveInside(root: string, key: string): string | null {
   return target.startsWith(resolvedRoot + path.sep) ? target : null;
 }
 
+// Uploaded keys are unique per upload and never rewritten, so phones may keep
+// them for a long time. `private`: responses are per-user gated, so shared
+// caches must not keep them.
+const CACHE_CONTROL = 'private, max-age=31536000, immutable';
+
+// Where a key may live on local disk (dev, or files that never reached S3).
+function localCandidates(key: string): (string | null)[] {
+  return [
+    resolveInside(path.join(__dirname, '../../../admin/public'), key),
+    resolveInside(path.join(__dirname, '../../admin/dist'), key),
+    resolveInside(path.join(__dirname, '../../../admin/public/uploads'), path.basename(key)),
+    resolveInside(path.join(__dirname, '../../admin/dist/uploads'), path.basename(key)),
+  ];
+}
+
+/** Loads a stored file fully into memory — S3 first, then local disk. Null if missing. */
+async function readOriginal(key: string): Promise<Buffer | null> {
+  const s3Info = getS3Client();
+  if (s3Info) {
+    const keys = key.startsWith(`${s3Info.bucket}/`) ? [key, key.slice(s3Info.bucket.length + 1)] : [key];
+    for (const candidate of keys) {
+      try {
+        const response = await s3Info.client.send(
+          new GetObjectCommand({ Bucket: s3Info.bucket, Key: candidate })
+        );
+        if (response.Body) return Buffer.from(await response.Body.transformToByteArray());
+      } catch {
+        // missing under this key — try the next one, then local disk
+      }
+    }
+  }
+  for (const localPath of localCandidates(key)) {
+    if (localPath && fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
+      return fs.promises.readFile(localPath);
+    }
+  }
+  return null;
+}
+
 // GET /api/files/* or /files/*
+// `?w=400|800|1080` serves a resized WebP of an image instead of the original
+// (a 2.5 MB PNG page becomes ~50–80 KB), cached on disk after the first request.
 // Streams files from MinIO / S3 (or local filesystem fallback) to the client.
 // Signed-in callers only (header or `?token=`): page images are book content.
 router.get('/*', requireFileReader, async (req: Request, res: Response) => {
@@ -39,6 +81,19 @@ router.get('/*', requireFileReader, async (req: Request, res: Response) => {
     }
     if (!isSafeKey(key)) {
       return res.status(400).json({ error: 'مسیر فایل نامعتبر است' });
+    }
+
+    const width = parseVariantWidth(req.query.w);
+    if (width && isResizableKey(key) && !req.headers.range) {
+      const variant = await getVariant(key, width, () => readOriginal(key));
+      if (variant) {
+        res.setHeader('Content-Type', 'image/webp');
+        res.setHeader('Content-Length', variant.length.toString());
+        res.setHeader('Cache-Control', CACHE_CONTROL);
+        return res.status(200).end(variant);
+      }
+      // Missing or undecodable original — fall through to the normal path,
+      // which serves it as-is or 404s.
     }
 
     const s3Info = getS3Client();
@@ -97,7 +152,7 @@ router.get('/*', requireFileReader, async (req: Request, res: Response) => {
           }
 
           // Private: the response is per-user gated, so shared caches must not keep it.
-          res.setHeader('Cache-Control', 'private, max-age=86400');
+          res.setHeader('Cache-Control', CACHE_CONTROL);
           res.setHeader('Accept-Ranges', 'bytes');
 
           if (response.$metadata?.httpStatusCode === 206 && response.ContentRange) {
@@ -141,14 +196,7 @@ router.get('/*', requireFileReader, async (req: Request, res: Response) => {
     }
 
     // Local filesystem fallback
-    const localPaths = [
-      resolveInside(path.join(__dirname, '../../../admin/public'), key),
-      resolveInside(path.join(__dirname, '../../admin/dist'), key),
-      resolveInside(path.join(__dirname, '../../../admin/public/uploads'), path.basename(key)),
-      resolveInside(path.join(__dirname, '../../admin/dist/uploads'), path.basename(key)),
-    ];
-
-    for (const localPath of localPaths) {
+    for (const localPath of localCandidates(key)) {
       if (localPath && fs.existsSync(localPath) && fs.statSync(localPath).isFile()) {
         return res.sendFile(path.resolve(localPath));
       }

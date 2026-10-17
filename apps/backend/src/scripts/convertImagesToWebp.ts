@@ -87,7 +87,8 @@ async function writeObject(key: string, body: Buffer): Promise<void> {
       Key: bareKey,
       Body: body,
       ContentType: 'image/webp',
-      ACL: 'public-read',
+      // No public ACL: like every upload (see utils/storage.ts), files are only
+      // served through the authenticated /api/files proxy.
     })
   );
 }
