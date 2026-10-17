@@ -31,6 +31,18 @@ export async function toWebp(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Resizes an image to at most `width` pixels wide (never enlarging) and
+ * re-encodes it as WebP — the on-request variants served by /api/files?w=.
+ */
+export async function toWebpWidth(buffer: Buffer, width: number): Promise<Buffer> {
+  return sharp(buffer, { failOn: 'none' })
+    .rotate()
+    .resize({ width, withoutEnlargement: true })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer();
+}
+
+/**
  * Returns the file as a compact WebP, renamed to `.webp`. PNG book pages shrink
  * roughly 20× this way, which is most of what the reader waits for. Anything
  * that isn't a convertible image — or fails to decode — is returned unchanged,
