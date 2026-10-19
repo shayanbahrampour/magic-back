@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import prisma from '../db';
 import { MyketError, MyketRejection, verifyMyketPurchase } from './myket';
 import {
@@ -33,6 +34,15 @@ export function addMonths(from: Date, months: number): Date {
   // The month rolled over (31 Jan + 1 month), so step back to that month's end.
   if (result.getUTCDate() < day) result.setUTCDate(0);
   return result;
+}
+
+/**
+ * The `order_id` of the Payment row for a Myket purchase. Derived from the
+ * purchase token rather than random, so the unique `order_id` index is what
+ * guarantees one purchase can never produce two rows (and two grants).
+ */
+export function myketOrderId(purchaseToken: string): string {
+  return `MGC-MYK-${createHash('sha256').update(purchaseToken).digest('hex').slice(0, 32)}`;
 }
 
 /** A short, unique merchant-side reference sent to Zibal as `orderId`. */

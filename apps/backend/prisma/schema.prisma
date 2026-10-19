@@ -336,10 +336,11 @@ model Payment {
   order_id       String            @unique
   // Zibal's `trackId`. A string because the values exceed a 32-bit int.
   track_id       String?           @unique
-  // Myket's purchase token — what its validation API is queried with. Unique so
-  // one Myket purchase can only ever be granted once. Myket's own order id goes
-  // in `ref_number`.
-  purchase_token String?           @unique
+  // Myket's purchase token — what its validation API is queried with. Myket's
+  // own order id goes in `ref_number`. One purchase can only ever map to one row
+  // because a Myket row's `order_id` is derived from this token (see
+  // `myketOrderId`), and `order_id` is unique.
+  purchase_token String?
   status         String            @default("pending")
   // Zibal's numeric payment status (their "جدول وضعیت‌ها"), kept for support.
   gateway_status Int?
@@ -354,4 +355,5 @@ model Payment {
 
   @@index([user_id])
   @@index([status])
+  @@index([purchase_token])
 }

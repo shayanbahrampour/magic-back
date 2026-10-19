@@ -9,6 +9,7 @@ import {
   PAYMENT_KIND_BOOK,
   PAYMENT_KIND_SUBSCRIPTION,
   PAYMENT_PROVIDER_MYKET,
+  myketOrderId,
   newOrderId,
   recordCallback,
   settleMyketPayment,
@@ -248,20 +249,23 @@ function parseMyketSku(
 // The app calls this right after the Myket sheet closes, and again on later
 // launches for any purchase it could not get confirmed. One purchase token maps
 // to one Payment row, so every repeat lands on the same row and grants at most
-// once. Answers with the same shape as GET /:trackId.
+// once (the row's `order_id` is derived from the token). Answers with the same
+// shape as GET /:trackId.
 router.post('/myket/verify', requireUser, async (req: UserAuthRequest, res) => {
   const userId = req.appUser!.id;
   const sku = typeof req.body?.sku === 'string' ? req.body.sku.trim() : '';
   const purchaseToken = typeof req.body?.purchaseToken === 'string' ? req.body.purchaseToken.trim() : '';
-  const myketOrderId = typeof req.body?.orderId === 'string' ? req.body.orderId.trim() : '';
+  const myketRef = typeof req.body?.orderId === 'string' ? req.body.orderId.trim() : '';
 
   const target = parseMyketSku(sku);
   if (!target || !purchaseToken) {
     return res.status(400).json({ error: 'اطلاعات خرید مایکت معتبر نیست.' });
   }
 
+  const orderId = myketOrderId(purchaseToken);
+
   try {
-    let payment = await prisma.payment.findUnique({ where: { purchase_token: purchaseToken } });
+    let payment = await prisma.payment.findUnique({ where: { order_id: orderId } });
 
     if (!payment) {
       // Priced from our own catalogue: Myket charged whatever its product is set
@@ -287,16 +291,16 @@ router.post('/myket/verify', requireUser, async (req: UserAuthRequest, res) => {
             book_id: target.kind === 'book' ? target.bookId : null,
             amount_toman: amountToman,
             amount_rial: tomanToRial(amountToman),
-            order_id: newOrderId('MYK'),
+            order_id: orderId,
             purchase_token: purchaseToken,
-            ref_number: myketOrderId || null,
+            ref_number: myketRef || null,
             status: 'pending',
           },
         });
       } catch (error) {
         // Two concurrent reports of the same purchase: the other one made the row.
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          payment = await prisma.payment.findUnique({ where: { purchase_token: purchaseToken } });
+          payment = await prisma.payment.findUnique({ where: { order_id: orderId } });
         }
         if (!payment) throw error;
       }
