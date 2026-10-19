@@ -298,7 +298,10 @@ model BookPurchase {
   @@index([user_id])
 }
 
-// One checkout attempt through the Zibal internet payment gateway (IPG).
+// One checkout attempt through the Zibal internet payment gateway (IPG), or one
+// purchase made through Myket's in-app billing (`provider = 'myket'`). Myket rows
+// are created when the app reports a finished purchase, so they skip straight
+// from `pending` to `verified` or `failed`.
 //
 // The row is created *before* the user is sent to the bank, so an abandoned or
 // failed payment leaves an auditable trace rather than nothing. `status` walks
@@ -327,10 +330,16 @@ model Payment {
   // the admin panel speak, rials is what Zibal is sent.
   amount_toman   Int
   amount_rial    Int
+  // 'zibal' (browser gateway) | 'myket' (Myket in-app billing, Android store build).
+  provider       String            @default("zibal")
   // Our own reference, sent to Zibal as `orderId` and shown in their reports.
   order_id       String            @unique
   // Zibal's `trackId`. A string because the values exceed a 32-bit int.
   track_id       String?           @unique
+  // Myket's purchase token — what its validation API is queried with. Unique so
+  // one Myket purchase can only ever be granted once. Myket's own order id goes
+  // in `ref_number`.
+  purchase_token String?           @unique
   status         String            @default("pending")
   // Zibal's numeric payment status (their "جدول وضعیت‌ها"), kept for support.
   gateway_status Int?

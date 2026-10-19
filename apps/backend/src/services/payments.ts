@@ -1,4 +1,5 @@
 import prisma from '../db';
+import { MyketError, MyketRejection, verifyMyketPurchase } from './myket';
 import {
   ZibalError,
   inquiryPayment,
@@ -13,6 +14,8 @@ export type PaymentStatus = 'pending' | 'paid' | 'verified' | 'failed' | 'cancel
 
 export const PAYMENT_KIND_SUBSCRIPTION = 'subscription';
 export const PAYMENT_KIND_BOOK = 'book';
+
+export const PAYMENT_PROVIDER_MYKET = 'myket';
 
 /** Zibal is priced in rials; everything user-facing in this app is in tomans. */
 export function tomanToRial(toman: number): number {
@@ -236,6 +239,76 @@ export async function settlePayment(paymentId: number): Promise<SettleOutcome> {
     data: { status: 'failed', failure_reason: message },
   });
   return { status: 'failed', message, granted: false };
+}
+
+/**
+ * Confirms a Myket purchase with Myket and, when it is genuine, grants what it
+ * bought. Safe to repeat: the app retries until it hears back, and a payment
+ * already verified just reports success again.
+ *
+ * A failed row is re-checked rather than returned as-is, so a purchase refused
+ * because of a server misconfiguration is recovered once that is fixed.
+ */
+export async function settleMyketPayment(
+  paymentId: number,
+  sku: string,
+  purchaseToken: string
+): Promise<SettleOutcome> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    return { status: 'failed', message: 'پرداخت یافت نشد.', granted: false };
+  }
+  if (payment.status === 'verified') {
+    if (!payment.granted) await grantEntitlement(payment);
+    return { status: 'verified', message: 'پرداخت شما با موفقیت انجام شد.', granted: true };
+  }
+
+  const fail = async (message: string): Promise<SettleOutcome> => {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'failed', failure_reason: message },
+    });
+    return { status: 'failed', message, granted: false };
+  };
+
+  let info;
+  try {
+    info = await verifyMyketPurchase(sku, purchaseToken);
+  } catch (error) {
+    if (error instanceof MyketRejection) return fail(error.message);
+    console.error('[PAYMENTS] Myket verify call failed:', error);
+    return {
+      status: 'pending',
+      message:
+        error instanceof MyketError
+          ? error.message
+          : 'ارتباط با مایکت برقرار نشد. لطفاً چند لحظه بعد دوباره بررسی کنید.',
+      granted: false,
+    };
+  }
+
+  if (info.purchaseState !== 0) {
+    return fail('این خرید در مایکت لغو یا بازگردانده شده است.');
+  }
+  // The app sends the SKU as the payload. A token whose payload names a
+  // different product is being replayed against the wrong item.
+  if (info.developerPayload && info.developerPayload !== sku) {
+    console.warn('[PAYMENTS] Myket payload mismatch:', payment.id, sku, info.developerPayload);
+    return fail('اطلاعات این خرید با محصول درخواستی مطابقت ندارد.');
+  }
+
+  const updated = await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: 'verified',
+      paid_at: info.purchaseTime ? new Date(info.purchaseTime) : payment.paid_at ?? new Date(),
+      verified_at: new Date(),
+      failure_reason: null,
+    },
+  });
+
+  await grantEntitlement(updated);
+  return { status: 'verified', message: 'پرداخت شما با موفقیت انجام شد.', granted: true };
 }
 
 /**
